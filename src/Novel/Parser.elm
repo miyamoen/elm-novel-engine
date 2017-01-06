@@ -4,8 +4,8 @@ module Novel.Parser exposing (..)
 import Novel exposing (Novel(..))
 
 
-import Combine exposing (Parser, many1, while, sepEndBy1, ($>), (<*))
-import Combine.Char exposing (anyChar, char, noneOf)
+import Combine exposing (Parser, many1, many, while, sepEndBy1, ($>), (<*))
+import Combine.Char exposing (anyChar, char, noneOf, eol)
 
 type alias Label = String
 
@@ -46,4 +46,5 @@ text =
 
 at : Parser () (Novel ())
 at =
-  char '@' $> Novel.at
+  char '@' <* many eol
+    $> Novel.at

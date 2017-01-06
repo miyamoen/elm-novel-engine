@@ -1,28 +1,98 @@
-module Novel exposing (Novel, empty, parser)
+module Novel exposing (..)
 
 
-import Combine exposing (Parser, manyTill)
-import Combine.Char exposing (anyChar)
-
+import List.Extra
 type alias Label = String
 
 
-{-
-type Novel
-  = Text String Novel
-  | Line Label String Novel
-  | End
--}
 
-type Novel
-  = Text String
+type Novel a
+  = Text String (Novel a)
+  -- | Line Label String Novel
+  | At (Novel a)
+  | Return a
 
 
-parser : Parser s Novel
-parser =
-  manyTill anyChar Combine.end
-    |> Combine.map (String.fromList >> Text)
+text : String -> Novel ()
+text text =
+  Text text return
 
-empty : Novel
-empty =
-  Text ""
+
+at : Novel ()
+at =
+  At return
+
+
+return : Novel ()
+return =
+  Return ()
+
+
+andThen : (a -> Novel b) -> Novel a -> Novel b
+andThen func novel =
+  case novel of
+    Text text next ->
+      Text text <| andThen func next
+
+    At next ->
+      At <| andThen func next
+
+    Return val ->
+      func val
+
+
+append : Novel a -> Novel b -> Novel b
+append left right =
+  andThen (\_ -> right) left
+
+
+andEnd : Novel b -> Novel a -> Novel b
+andEnd =
+  flip append
+
+
+uncons : Novel a -> Maybe (Novel (), Novel a)
+uncons novel =
+  case novel of
+    Return a ->
+      Nothing
+
+    Text str rest ->
+      Just (text str, rest)
+
+    At rest ->
+      Just (at, rest)
+
+
+concat : List (Novel a) -> Maybe (Novel a)
+concat =
+  List.Extra.foldl1 append
+
+
+untilAt : Novel a -> (Novel (), Novel a)
+untilAt novel =
+  case novel of
+    Return a ->
+      (return, Return a)
+
+    Text str rest ->
+      let
+        (head, rest_) = untilAt rest
+      in
+        (text str |> andEnd head, rest_)
+
+    At rest ->
+      (at, rest)
+
+
+toString : Novel a -> String
+toString novel =
+  case novel of
+    Return a ->
+      ""
+
+    Text str rest ->
+      str ++ toString rest
+
+    At rest ->
+      " ▼"

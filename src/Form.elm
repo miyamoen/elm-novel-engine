@@ -4,15 +4,15 @@ import Basics.Extra exposing ((=>))
 import Response exposing (withCmd, withNone)
 import Random exposing (Generator)
 import Html exposing (..)
-import Html.Attributes exposing (placeholder, value)
+import Html.Attributes exposing (placeholder, value, rows, cols)
 import Html.Events exposing (onInput, onClick)
 import Time
 import Color
 import Debug
 import CssBasics exposing (Declaration, toStyleAttribute, CssValue(..), UnitType(..))
-import Combine exposing (parse)
-import Novel exposing (Novel)
 
+import Novel exposing (Novel)
+import Novel.Parser as Parser
 
 main : Program Never Model Msg
 main =
@@ -27,21 +27,26 @@ main =
 
 
 type alias Model =
-  { novel : Novel
+  { novel : Novel ()
+  , screen : String
   , input : String
+  , error : String
   }
 
 
 defaultModel : Model
 defaultModel =
-  { novel = Novel.empty
+  { novel = Novel.return
+  , screen = ""
   , input = ""
+  , error = ""
   }
 
 
 type Msg
   = Input String
   | Run
+  | Feed
 
 
 init : ( Model, Cmd Msg )
@@ -57,13 +62,24 @@ update msg model =
         |> withNone
 
     Run ->
-      case parse Novel.parser model.input of
-        Ok (_, _, novel) ->
-          { model | novel = novel }
+      case Parser.parse model.input of
+        Ok novel ->
+          { model | novel = Debug.log "novelの中身" novel, screen = "Click Start!▼" }
             |> withNone
 
-        _ ->
-          withNone model
+        Err error ->
+          { model | error = error }
+            |> withNone
+
+    Feed ->
+      let
+        (head, rest) = Novel.untilAt model.novel
+      in
+        { model
+          | screen = if head == Novel.return then "End" else Novel.toString head
+          , novel = rest
+        } |> withNone
+
 
 
 subscriptions : Model -> Sub Msg
@@ -74,7 +90,8 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ novelView model
+    [ errorView model
+    , novelView model
     , inputForm model
     , runButton
     ]
@@ -82,10 +99,12 @@ view model =
 
 inputForm : Model -> Html Msg
 inputForm { input } =
-  Html.input
+  textarea
     [ placeholder "Input Your Novel!"
     , value input
     , onInput Input
+    , rows 10
+    , cols 50
     ]
     []
 
@@ -98,9 +117,12 @@ runButton =
 
 
 novelView : Model -> Html Msg
-novelView { novel } =
-  div [ toStyleAttribute stringViewStyle ]
-    [ text (toString novel) ]
+novelView { screen } =
+  pre
+    [ toStyleAttribute stringViewStyle
+    , onClick Feed
+    ]
+    [ text screen ]
 
 
 stringViewStyle : List (Declaration number)
@@ -109,3 +131,10 @@ stringViewStyle =
   , "height" => Unit 20 Em
   , "background-color" => (Col Color.lightGrey)
   ]
+
+
+errorView : Model -> Html msg
+errorView { error } =
+  div
+    []
+    [ text error ]

@@ -4,7 +4,7 @@ import Basics.Extra exposing ((=>))
 import Response exposing (withCmd, withNone)
 import Random exposing (Generator)
 import Html exposing (..)
-import Html.Attributes exposing (placeholder, value, rows, cols)
+import Html.Attributes as Attr exposing (placeholder, value, rows, cols, rel, href, type_, class)
 import Html.Events exposing (onInput, onClick)
 import Time
 import Color
@@ -87,54 +87,159 @@ subscriptions model =
   Sub.none
 
 
+stylesheet : String -> Html msg
+stylesheet url =
+  node "link"
+    [ rel "stylesheet"
+    , type_ "text/css"
+    , href url
+    ]
+    []
+
+
+bulma : Html msg
+bulma =
+  stylesheet "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.3.0/css/bulma.min.css"
+
+
+fontAwesome : Html msg
+fontAwesome =
+  stylesheet "https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"
+
+
+classList : List String -> Attribute msg
+classList list =
+  list
+    |> List.map (flip (,) True)
+    |> Attr.classList
+
+
 view : Model -> Html Msg
 view model =
   div []
-    [ errorView model
-    , novelView model
-    , inputForm model
-    , runButton
+    [ bulma
+    , fontAwesome
+    , header
+    , messageView model
+    , div [ classList [ "tile", "is-ancestor" ] ]
+      [ novelView model
+      , div
+        [ classList [ "tile", "is-6", "is-vertical" ] ]
+        [ controlView
+        , inputForm model
+        ]
+      ]
+    ]
+
+
+header : Html msg
+header =
+  section
+    [ classList [ "hero", "is-primary" ] ]
+    [ div [ classList [ "hero-head" ]]
+      [ nav [ classList [ "nav", "has-shadow" ]]
+        [ div [ class "nav-right" ]
+          [ a [ class "nav-item", href "https://github.com/miyamoen/elm-novel-engine" ]
+            [ span [ class "icon"]
+              [ i [ classList [ "fa", "fa-github" ] ] [] ]
+            ]
+          ]
+        ]
+      ]
+    , div [ class "hero-body has-text-centered" ]
+      [ h1 [ class "title" ] [ text "Novel Engine" ] ]
     ]
 
 
 inputForm : Model -> Html Msg
 inputForm { input } =
-  textarea
-    [ placeholder "Input Your Novel!"
-    , value input
-    , onInput Input
-    , rows 10
-    , cols 50
+  div
+    [ classList
+      [ "tile"
+      , "is-parent"
+      , "is-vertical"
+      , "container"
+      , "is-fluid"
+      ]
     ]
-    []
+    [ label [ classList [ "label", "tile", "is-child" ] ] [ text "Your Novel" ]
+    , p [ classList [ "control", "tile", "is-child" ] ]
+      [ textarea
+        [ classList [ "textarea", "is-large", "is-primary" ]
+        , placeholder "Input Your Novel!"
+        , value input
+        ,onInput Input
+        ] []
+      ]
+    ]
 
 
-runButton : Html Msg
-runButton =
-  button
-    [ onClick Run ]
-    [ text "Run" ]
-
+controlView : Html Msg
+controlView =
+  div
+    [ classList
+      [ "tile"
+      , "is-parent"
+      ]
+    ]
+    [ p
+      [ classList
+        [ "control"
+        , "tile"
+        , "is-child"
+        ]
+      ]
+      [ a
+        [ onClick Run
+        , classList
+          [ "button"
+          , "is-primary"
+          , "is-outlined"
+          , "is-large"
+          ]
+        ]
+        [ span [ class "icon" ]
+          [ i [ classList [ "fa", "fa-play-circle" ] ] [] ]
+        , span [] [ text "Run" ]
+        ]
+      ]
+    ]
 
 novelView : Model -> Html Msg
 novelView { screen } =
-  pre
-    [ toStyleAttribute stringViewStyle
-    , onClick Feed
-    ]
-    [ text screen ]
-
-
-stringViewStyle : List (Declaration number)
-stringViewStyle =
-  [ "width" => Unit 50 Em
-  , "height" => Unit 20 Em
-  , "background-color" => (Col Color.lightGrey)
-  ]
-
-
-errorView : Model -> Html msg
-errorView { error } =
   div
-    []
-    [ text error ]
+    [ classList
+      [ "box"
+      , "container"
+      , "tile"
+      , "is-parent"
+      , "is-5"
+      ]
+    ]
+    [ pre
+      [ classList
+        [ "tile"
+        , "is-child"
+        ]
+      , onClick Feed
+      ]
+      [ text screen ]
+    ]
+
+
+messageView : Model -> Html msg
+messageView { error } =
+  div
+    [ classList
+      [ "box"
+      , "container"
+      ]
+    ]
+    [ article
+      [ classList
+        [ "notification"
+        , "is-info"
+        ]
+      ]
+      [ p [] [ text error ] ]
+    ]

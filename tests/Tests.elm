@@ -16,30 +16,30 @@ all : Test
 all =
   describe "Novel Parser Test"
     [ describe "Novel Test"
-      [ "at produces At End"
-        => at === At End
-      , "text produces Text string End"
-        => text plain === Text plain End
-      , "end produces End"
-        => end === End
-      , "text appends end"
-        => append (text plain) end === Text plain End
-      , "end appends end"
-        => append end end === End
+      [ "at produces At Return"
+        => at === At (Return ())
+      , "text produces Text string Return"
+        => text plain === Text plain (Return ())
+      , "return produces Return"
+        => return === Return ()
+      , "text appends return"
+        => append (text plain) return === Text plain (Return ())
+      , "return appends return"
+        => append return return === Return ()
       , "text appends at"
-        => append (text plain) at === Text plain (At End)
+        => append (text plain) at === Text plain (At (Return ()))
       , "text appends text"
-        => append (text "1") (text "2") === Text "1" (Text "2" End)
+        => append (text "1") (text "2") === Text "1" (Text "2" (Return ()))
       , "at appends at"
-        => append at at === At (At End)
+        => append at at === At (At (Return ()))
       , "at appends text"
-        => append at (text plain) === At (Text plain End)
-      , "at appends end"
-        => append at end === At End
-      , "end appends at"
-        => append end at === At End
-      , "end appends text"
-        => append end (text plain) === Text plain End
+        => append at (text plain) === At (Text plain (Return ()))
+      , "at appends return"
+        => append at return === At (Return ())
+      , "return appends at"
+        => append return at === At (Return ())
+      , "return appends text"
+        => append return (text plain) === Text plain (Return ())
       , Parser.all
       ]
     ]

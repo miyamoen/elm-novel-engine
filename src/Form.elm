@@ -2,14 +2,12 @@ module Form exposing (..)
 
 import Basics.Extra exposing ((=>))
 import Response exposing (withCmd, withNone)
-import Random exposing (Generator)
 import Html exposing (..)
 import Html.Attributes as Attr exposing (placeholder, value, rows, cols, rel, href, type_, class)
 import Html.Events exposing (onInput, onClick)
 import Time
 import Color
 import Debug
-import CssBasics exposing (Declaration, toStyleAttribute, CssValue(..), UnitType(..))
 
 import Novel exposing (Novel)
 import Novel.Parser as Parser

@@ -617,8 +617,7 @@ function toString(v)
 	var type = typeof v;
 	if (type === 'function')
 	{
-		var name = v.func ? v.func.name : v.name;
-		return '<function' + (name === '' ? '' : ':') + name + '>';
+		return '<function>';
 	}
 
 	if (type === 'boolean')
@@ -1152,6 +1151,13 @@ return {
 var _elm_lang$core$List$sortBy = _elm_lang$core$Native_List.sortBy;
 var _elm_lang$core$List$sort = function (xs) {
 	return A2(_elm_lang$core$List$sortBy, _elm_lang$core$Basics$identity, xs);
+};
+var _elm_lang$core$List$singleton = function (value) {
+	return {
+		ctor: '::',
+		_0: value,
+		_1: {ctor: '[]'}
+	};
 };
 var _elm_lang$core$List$drop = F2(
 	function (n, list) {
@@ -2026,7 +2032,7 @@ function endsWith(sub, str)
 function indexes(sub, str)
 {
 	var subLen = sub.length;
-	
+
 	if (subLen < 1)
 	{
 		return _elm_lang$core$Native_List.Nil;
@@ -2039,74 +2045,78 @@ function indexes(sub, str)
 	{
 		is.push(i);
 		i = i + subLen;
-	}	
-	
+	}
+
 	return _elm_lang$core$Native_List.fromArray(is);
 }
+
 
 function toInt(s)
 {
 	var len = s.length;
+
+	// if empty
 	if (len === 0)
 	{
-		return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int" );
+		return intErr(s);
 	}
-	var start = 0;
-	if (s[0] === '-')
+
+	// if hex
+	var c = s[0];
+	if (c === '0' && s[1] === 'x')
 	{
-		if (len === 1)
+		for (var i = 2; i < len; ++i)
 		{
-			return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int" );
+			var c = s[i];
+			if (('0' <= c && c <= '9') || ('A' <= c && c <= 'F') || ('a' <= c && c <= 'f'))
+			{
+				continue;
+			}
+			return intErr(s);
 		}
-		start = 1;
+		return _elm_lang$core$Result$Ok(parseInt(s, 16));
 	}
-	for (var i = start; i < len; ++i)
+
+	// is decimal
+	if (c > '9' || (c < '0' && c !== '-' && c !== '+'))
+	{
+		return intErr(s);
+	}
+	for (var i = 1; i < len; ++i)
 	{
 		var c = s[i];
 		if (c < '0' || '9' < c)
 		{
-			return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int" );
+			return intErr(s);
 		}
 	}
+
 	return _elm_lang$core$Result$Ok(parseInt(s, 10));
 }
 
+function intErr(s)
+{
+	return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int");
+}
+
+
 function toFloat(s)
 {
-	var len = s.length;
-	if (len === 0)
+	// check if it is a hex, octal, or binary number
+	if (s.length === 0 || /[\sxbo]/.test(s))
 	{
-		return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float" );
+		return floatErr(s);
 	}
-	var start = 0;
-	if (s[0] === '-')
-	{
-		if (len === 1)
-		{
-			return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float" );
-		}
-		start = 1;
-	}
-	var dotCount = 0;
-	for (var i = start; i < len; ++i)
-	{
-		var c = s[i];
-		if ('0' <= c && c <= '9')
-		{
-			continue;
-		}
-		if (c === '.')
-		{
-			dotCount += 1;
-			if (dotCount <= 1)
-			{
-				continue;
-			}
-		}
-		return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float" );
-	}
-	return _elm_lang$core$Result$Ok(parseFloat(s));
+	var n = +s;
+	// faster isNaN check
+	return n === n ? _elm_lang$core$Result$Ok(n) : floatErr(s);
 }
+
+function floatErr(s)
+{
+	return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float");
+}
+
 
 function toList(str)
 {
@@ -2806,15 +2816,8 @@ function setupIncomingPort(name, callback)
 		sentBeforeInit.push(value);
 	}
 
-	function postInitSend(incomingValue)
+	function postInitSend(value)
 	{
-		var result = A2(_elm_lang$core$Json_Decode$decodeValue, converter, incomingValue);
-		if (result.ctor === 'Err')
-		{
-			throw new Error('Trying to send an unexpected type of value through port `' + name + '`:\n' + result._0);
-		}
-
-		var value = result._0;
 		var temp = subs;
 		while (temp.ctor !== '[]')
 		{
@@ -2825,7 +2828,13 @@ function setupIncomingPort(name, callback)
 
 	function send(incomingValue)
 	{
-		currentSend(incomingValue);
+		var result = A2(_elm_lang$core$Json_Decode$decodeValue, converter, incomingValue);
+		if (result.ctor === 'Err')
+		{
+			throw new Error('Trying to send an unexpected type of value through port `' + name + '`:\n' + result._0);
+		}
+
+		currentSend(result._0);
 	}
 
 	return { send: send };
@@ -4365,6 +4374,373 @@ var _Bogdanp$elm_combine$Combine_Char$hexDigit = A2(
 	_Bogdanp$elm_combine$Combine_ops['<?>'],
 	_Bogdanp$elm_combine$Combine_Char$satisfy(_elm_lang$core$Char$isHexDigit),
 	'expected a hexadecimal digit');
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Element = F7(
+	function (a, b, c, d, e, f, g) {
+		return {style: a, $float: b, alignment: c, sizing: d, display: e, visibility: f, interaction: g};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Content = F2(
+	function (a, b) {
+		return {container: a, size: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Image = F2(
+	function (a, b) {
+		return {container: a, size: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Heading = F3(
+	function (a, b, c) {
+		return {title: a, subtitle: b, size: c};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Icon = F2(
+	function (a, b) {
+		return {container: a, size: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Button = F6(
+	function (a, b, c, d, e, f) {
+		return {ui: a, style: b, size: c, state: d, color: e, addon: f};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Control = F8(
+	function (a, b, c, d, e, f, g, h) {
+		return {container: a, label: b, isGrouped: c, hasAddons: d, hasIcon: e, layout: f, state: g, addon: h};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Input = F6(
+	function (a, b, c, d, e, f) {
+		return {ui: a, display: b, size: c, state: d, color: e, addon: f};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Textarea = F5(
+	function (a, b, c, d, e) {
+		return {ui: a, display: b, size: c, state: d, color: e};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Checkbox = F2(
+	function (a, b) {
+		return {ui: a, state: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Radio = F2(
+	function (a, b) {
+		return {ui: a, state: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Select = F4(
+	function (a, b, c, d) {
+		return {ui: a, size: b, state: c, addon: d};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Label = function (a) {
+	return {ui: a};
+};
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Help = F2(
+	function (a, b) {
+		return {ui: a, color: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Delete = F2(
+	function (a, b) {
+		return {ui: a, size: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Notification = F2(
+	function (a, b) {
+		return {ui: a, color: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Progress = F3(
+	function (a, b, c) {
+		return {ui: a, size: b, color: c};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Tag = F3(
+	function (a, b, c) {
+		return {ui: a, size: b, color: c};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Number = function (a) {
+	return {ui: a};
+};
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Section = F2(
+	function (a, b) {
+		return {container: a, spacing: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Nav = F8(
+	function (a, b, c, d, e, f, g, h) {
+		return {container: a, left: b, center: c, right: d, toggle: e, menu: f, item: g, style: h};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Footer = function (a) {
+	return {container: a};
+};
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Hero = F9(
+	function (a, b, c, d, e, f, g, h, i) {
+		return {container: a, head: b, body: c, foot: d, video: e, buttons: f, style: g, size: h, color: i};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Feature = F2(
+	function (a, b) {
+		return {container: a, sizing: b};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Columns = F5(
+	function (a, b, c, d, e) {
+		return {container: a, column: b, alignment: c, spacing: d, display: e};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Level = F5(
+	function (a, b, c, d, e) {
+		return {container: a, left: b, right: c, item: d, mobile: e};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Table = F3(
+	function (a, b, c) {
+		return {container: a, style: b, spacing: c};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Tile = F4(
+	function (a, b, c, d) {
+		return {container: a, level: b, orientation: c, width: d};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Menu = F3(
+	function (a, b, c) {
+		return {container: a, label: b, list: c};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Tabs = F4(
+	function (a, b, c, d) {
+		return {container: a, style: b, alignment: c, size: d};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Panel = F4(
+	function (a, b, c, d) {
+		return {container: a, heading: b, tabs: c, block: d};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Pagination = F5(
+	function (a, b, c, d, e) {
+		return {container: a, previous: b, next: c, list: d, position: e};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Card = F5(
+	function (a, b, c, d, e) {
+		return {container: a, image: b, content: c, header: d, footer: e};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Media = F5(
+	function (a, b, c, d, e) {
+		return {container: a, left: b, right: c, content: d, size: e};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Message = F4(
+	function (a, b, c, d) {
+		return {container: a, header: b, body: c, color: d};
+	});
+var _danielnarey$elm_bulma_classes$Internal_RecordTypes$Modal = F6(
+	function (a, b, c, d, e, f) {
+		return {container: a, background: b, content: c, close: d, card: e, state: f};
+	});
+var _danielnarey$elm_bulma_classes$BulmaClasses$modal = {
+	container: 'modal',
+	background: 'modal-background',
+	content: 'modal-content',
+	close: {
+		ui: 'modal-close',
+		size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large'}
+	},
+	card: {container: 'modal-card', head: 'modal-card-head', title: 'modal-card-title', body: 'modal-card-body', foot: 'modal-card-foot'},
+	state: {isActive: 'is-active'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$message = {
+	container: 'message',
+	header: 'message-header',
+	body: 'message-body',
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$media = {
+	container: 'media',
+	left: 'media-left',
+	right: 'media-right',
+	content: 'media-content',
+	size: {isLarge: 'is-large'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$card = {
+	container: 'card',
+	image: 'card-image',
+	content: 'card-content',
+	header: {container: 'card-header', title: 'card-header-title', icon: 'card-header-icon'},
+	footer: {container: 'card-footer', item: 'card-footer-item'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$pagination = {
+	container: 'pagination',
+	previous: 'pagination-previous',
+	next: 'pagination-next',
+	list: {container: 'pagination-list', link: 'pagination-link', ellipsis: 'pagination-ellipsis'},
+	position: {isCentered: 'is-centered', isRight: 'is-right'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$panel = {
+	container: 'panel',
+	heading: 'panel-heading',
+	tabs: 'panel-tabs',
+	block: {
+		container: 'panel-block',
+		icon: 'panel-icon',
+		state: {isActive: 'is-active'}
+	}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$tabs = {
+	container: 'tabs',
+	style: {isBoxed: 'is-boxed', isToggle: 'is-toggle'},
+	alignment: {isCentered: 'is-centered', isRight: 'is-right'},
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large', isFullWidth: 'is-full-width'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$menu = {container: 'menu', label: 'menu-label', list: 'menu-list'};
+var _danielnarey$elm_bulma_classes$BulmaClasses$table = {
+	container: 'table',
+	style: {isBordered: 'is-bordered', isStriped: 'is-striped'},
+	spacing: {isNarrow: 'is-narrow'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$tile = {
+	container: 'tile',
+	level: {isAncestor: 'is-ancestor', isParent: 'is-parent', isChild: 'is-child'},
+	orientation: {isVertical: 'is-vertical'},
+	width: {is1: 'is-1', is2: 'is-2', is3: 'is-3', is4: 'is-4', is5: 'is-5', is6: 'is-6', is7: 'is-7', is8: 'is-8', is9: 'is-9', is10: 'is-10', is11: 'is-11'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$columns = {
+	container: 'columns',
+	column: {
+		container: 'column',
+		width: {isOneQuarter: 'is-one-quarter', isOneThird: 'is-one-third', isHalf: 'is-half', isTwoThirds: 'is-two-thirds', isThreeQuarters: 'is-three-quarters', is1: 'is-1', is2: 'is-2', is3: 'is-3', is4: 'is-4', is5: 'is-5', is6: 'is-6', is7: 'is-7', is8: 'is-8', is9: 'is-9', is10: 'is-10', is11: 'is-11', isNarrow: 'is-narrow'},
+		offset: {isOneQuarter: 'is-offset-one-quarter', isOneThird: 'is-offset-one-third', isHalf: 'is-offset-half', isTwoThirds: 'is-offset-two-thirds', isThreeQuarters: 'is-offset-three-quarters', is1: 'is-offset-1', is2: 'is-offset-2', is3: 'is-offset-3', is4: 'is-offset-4', is5: 'is-offset-5', is6: 'is-offset-6', is7: 'is-offset-7', is8: 'is-offset-8', is9: 'is-offset-9', is10: 'is-offset-10', is11: 'is-offset-11'}
+	},
+	alignment: {isCentered: 'is-centered', isVCentered: 'is-vcentered'},
+	spacing: {isMultiline: 'is-multiline', isGapless: 'is-gapless', isGrid: 'is-grid'},
+	display: {onMobile: 'is-mobile', onlyDesktop: 'is-desktop'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$feature = {
+	container: 'container',
+	sizing: {isFluid: 'is-fluid'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$level = {
+	container: 'level',
+	left: 'level-left',
+	right: 'level-right',
+	item: 'level-item',
+	mobile: {isHorizontal: 'is-mobile'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$hero = {
+	container: 'hero',
+	head: 'hero-head',
+	body: 'hero-body',
+	foot: 'hero-foot',
+	video: 'hero-video',
+	buttons: 'hero-buttons',
+	style: {isBold: 'is-bold'},
+	size: {isMedium: 'is-medium', isLarge: 'is-large', isFullheight: 'is-fullheight'},
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$nav = {
+	container: 'nav',
+	left: 'nav-left',
+	center: 'nav-center',
+	right: 'nav-right',
+	toggle: 'nav-toggle',
+	menu: {
+		container: 'nav-menu',
+		state: {isActive: 'is-active'}
+	},
+	item: {
+		container: 'nav-item',
+		style: {isTab: 'is-tab'},
+		state: {isActive: 'is-active'}
+	},
+	style: {hasShadow: 'has-shadow'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$footer = {container: 'footer'};
+var _danielnarey$elm_bulma_classes$BulmaClasses$section = {
+	container: 'section',
+	spacing: {isMedium: 'is-medium', isLarge: 'is-large'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$number = {ui: 'number'};
+var _danielnarey$elm_bulma_classes$BulmaClasses$tag = {
+	ui: 'tag',
+	size: {isMedium: 'is-medium', isLarge: 'is-large'},
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$progress = {
+	ui: 'progress',
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large'},
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$notification = {
+	ui: 'notification',
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$help = {
+	ui: 'help',
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$label = {ui: 'label'};
+var _danielnarey$elm_bulma_classes$BulmaClasses$select = {
+	ui: 'select',
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large', isFullwidth: 'is-fullwidth'},
+	state: {isHovered: 'is-hovered', isFocused: 'is-focused', isActive: 'is-active', isLoading: 'is-loading', isDisabled: 'is-disabled'},
+	addon: {isExpanded: 'is-expanded'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$radio = {
+	ui: 'radio',
+	state: {isDisabled: 'is-disabled'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$checkbox = {
+	ui: 'checkbox',
+	state: {isDisabled: 'is-disabled'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$textarea = {
+	ui: 'textarea',
+	display: {isInline: 'is-inline'},
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large', isFullwidth: 'is-fullwidth'},
+	state: {isHovered: 'is-hovered', isFocused: 'is-focused', isActive: 'is-active', isLoading: 'is-loading', isDisabled: 'is-disabled'},
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$input = {
+	ui: 'input',
+	display: {isInline: 'is-inline'},
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large', isFullwidth: 'is-fullwidth'},
+	state: {isHovered: 'is-hovered', isFocused: 'is-focused', isActive: 'is-active', isLoading: 'is-loading', isDisabled: 'is-disabled'},
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'},
+	addon: {isExpanded: 'is-expanded'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$delete = {
+	ui: 'delete',
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$button = {
+	ui: 'button',
+	style: {isLink: 'is-link', isOutlined: 'is-outlined', isInverted: 'is-inverted'},
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large'},
+	state: {isHovered: 'is-hovered', isFocused: 'is-focused', isActive: 'is-active', isLoading: 'is-loading', isDisabled: 'is-disabled'},
+	color: {isPrimary: 'is-primary', isInfo: 'is-info', isSuccess: 'is-success', isWarning: 'is-warning', isDanger: 'is-danger', isWhite: 'is-white', isLight: 'is-light', isDark: 'is-dark', isBlack: 'is-black'},
+	addon: {isExpanded: 'is-expanded'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$control = {
+	container: 'control',
+	label: 'control-label',
+	isGrouped: {left: 'is-grouped', centered: 'is-grouped is-grouped-centered', right: 'is-grouped is-grouped-right'},
+	hasAddons: {left: 'has-addons', centered: 'has-addons has-addons-centered', right: 'has-addons has-addons-right'},
+	hasIcon: {left: 'has-icon', right: 'has-icon has-icon-right'},
+	layout: {isHorizontal: 'is-horizontal'},
+	state: {isLoading: 'is-loading'},
+	addon: {isExpanded: 'is-expanded'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$icon = {
+	container: 'icon',
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$heading = {
+	title: 'title',
+	subtitle: 'subtitle',
+	size: {is1: 'is-1', is2: 'is-2', is3: 'is-3', is4: 'is-4', is5: 'is-5', is6: 'is-6'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$image = {
+	container: 'image',
+	size: {is16X16: 'is-16x16', is24x24: 'is-24x24', is32x32: 'is-32x32', is48x48: 'is-48x48', is64x64: 'is-64x64', is96x96: 'is-96x96', is128x128: 'is-128x128', isSquare: 'is-square', is1by1: 'is-1by1', is4by3: 'is-4by3', is3by2: 'is-3by2', is16by9: 'is-16by9', is2by1: 'is-2by1'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$content = {
+	container: 'content',
+	size: {isSmall: 'is-small', isMedium: 'is-medium', isLarge: 'is-large'}
+};
+var _danielnarey$elm_bulma_classes$BulmaClasses$element = {
+	style: {box: 'box'},
+	$float: {isClearfix: 'is-clearfix', isPulledLeft: 'is-pulled-left', isPulledRight: 'is-pulled-right'},
+	alignment: {hasTextCentered: 'has-text-centered', hasTextLeft: 'has-text-left', hasTextRight: 'has-text-right'},
+	sizing: {isOverlay: 'is-overlay', isFullwidth: 'is-fullwidth', isMarginless: 'is-marginless', isPaddingless: 'is-paddingless'},
+	display: {
+		isBlock: {always: 'is-block-touch is-block-desktop', mobile: 'is-block-mobile', tablet: 'is-block-tablet', tabletOnly: 'is-block-tablet-only', touch: 'is-block-touch', desktop: 'is-block-desktop', desktopOnly: 'is-block-desktop-only', widescreen: 'is-block-widescreen'},
+		isFlex: {always: 'is-flex-touch is-flex-desktop', mobile: 'is-flex-mobile', tablet: 'is-flex-tablet', tabletOnly: 'is-flex-tablet-only', touch: 'is-flex-touch', desktop: 'is-flex-desktop', desktopOnly: 'is-flex-desktop-only', widescreen: 'is-flex-widescreen'},
+		isInline: {always: 'is-inline-touch is-inline-desktop', mobile: 'is-inline-mobile', tablet: 'is-inline-tablet', tabletOnly: 'is-inline-tablet-only', touch: 'is-inline-touch', desktop: 'is-inline-desktop', desktopOnly: 'is-inline-desktop-only', widescreen: 'is-inline-widescreen'},
+		isInlineBlock: {always: 'is-inline-block-touch is-inline-block-desktop', mobile: 'is-inline-block-mobile', tablet: 'is-inline-block-tablet', tabletOnly: 'is-inline-block-tablet-only', touch: 'is-inline-block-touch', desktop: 'is-inline-block-desktop', desktopOnly: 'is-inline-block-desktop-only', widescreen: 'is-inline-block-widescreen'},
+		isInlineFlex: {always: 'is-inline-flex-touch is-inline-flex-desktop', mobile: 'is-inline-flex-mobile', tablet: 'is-inline-flex-tablet', tabletOnly: 'is-inline-flex-tablet-only', touch: 'is-inline-flex-touch', desktop: 'is-inline-flex-desktop', desktopOnly: 'is-inline-flex-desktop-only', widescreen: 'is-inline-flex-widescreen'}
+	},
+	visibility: {
+		isHidden: {always: 'is-hidden', mobile: 'is-hidden-mobile', tablet: 'is-hidden-tablet', tabletOnly: 'is-hidden-tablet-only', touch: 'is-hidden-touch', desktop: 'is-hidden-desktop', desktopOnly: 'is-hidden-desktop-only', widescreen: 'is-hidden-widescreen'}
+	},
+	interaction: {isUnselectable: 'is-unselectable'}
+};
 //import Native.List //
 
 var _elm_lang$core$Native_Array = function() {
@@ -6513,11 +6889,6 @@ function badToString(problem)
 				problem = problem.rest;
 				break;
 
-			case 'index':
-				context += '[' + problem.index + ']';
-				problem = problem.rest;
-				break;
-
 			case 'oneOf':
 				var problems = problem.problems;
 				for (var i = 0; i < problems.length; i++)
@@ -7215,9 +7586,9 @@ function on(name, options, decoder)
 
 function equalEvents(a, b)
 {
-	if (!a.options === b.options)
+	if (a.options !== b.options)
 	{
-		if (a.stopPropagation !== b.stopPropagation || a.preventDefault !== b.preventDefault)
+		if (a.options.stopPropagation !== b.options.stopPropagation || a.options.preventDefault !== b.options.preventDefault)
 		{
 			return false;
 		}
@@ -8493,7 +8864,7 @@ function normalRenderer(parentNode, view)
 var rAF =
 	typeof requestAnimationFrame !== 'undefined'
 		? requestAnimationFrame
-		: function(callback) { callback(); };
+		: function(callback) { setTimeout(callback, 1000 / 60); };
 
 function makeStepper(domNode, view, initialVirtualNode, eventNode)
 {
@@ -9502,14 +9873,1871 @@ var _elm_lang$core$Color$Linear = F3(
 		return {ctor: 'Linear', _0: a, _1: b, _2: c};
 	});
 var _elm_lang$core$Color$linear = _elm_lang$core$Color$Linear;
-var _elm_community$basics_extra$Basics_Extra$swap = function (_p0) {
-	var _p1 = _p0;
-	return {ctor: '_Tuple2', _0: _p1._1, _1: _p1._0};
+var _danielnarey$elm_css_basics$CssBasics$encodeCssValue = function (value) {
+	var unitToString = function (unit) {
+		var _p0 = unit;
+		switch (_p0.ctor) {
+			case 'Percent':
+				return '%';
+			case 'NoUnit':
+				return '';
+			default:
+				return _elm_lang$core$String$toLower(
+					_elm_lang$core$Basics$toString(unit));
+		}
+	};
+	var quoteMultiWord = function (string) {
+		return (_elm_lang$core$Native_Utils.cmp(
+			_elm_lang$core$List$length(
+				_elm_lang$core$String$words(string)),
+			1) > 0) ? A2(
+			_elm_lang$core$Basics_ops['++'],
+			'\'',
+			A2(_elm_lang$core$Basics_ops['++'], string, '\'')) : string;
+	};
+	var rgbToString = function (rgb) {
+		return _elm_lang$core$String$concat(
+			{
+				ctor: '::',
+				_0: 'rgba(',
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$core$Basics$toString(rgb.red),
+					_1: {
+						ctor: '::',
+						_0: ',',
+						_1: {
+							ctor: '::',
+							_0: _elm_lang$core$Basics$toString(rgb.green),
+							_1: {
+								ctor: '::',
+								_0: ',',
+								_1: {
+									ctor: '::',
+									_0: _elm_lang$core$Basics$toString(rgb.blue),
+									_1: {
+										ctor: '::',
+										_0: ',',
+										_1: {
+											ctor: '::',
+											_0: _elm_lang$core$Basics$toString(rgb.alpha),
+											_1: {
+												ctor: '::',
+												_0: ')',
+												_1: {ctor: '[]'}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			});
+	};
+	var _p1 = value;
+	switch (_p1.ctor) {
+		case 'Str':
+			return _p1._0;
+		case 'Col':
+			return rgbToString(
+				_elm_lang$core$Color$toRgb(_p1._0));
+		case 'Num':
+			return _elm_lang$core$Basics$toString(_p1._0);
+		case 'Integer':
+			return _elm_lang$core$Basics$toString(_p1._0);
+		case 'Unit':
+			return A2(
+				_elm_lang$core$Basics_ops['++'],
+				_elm_lang$core$Basics$toString(_p1._0),
+				unitToString(_p1._1));
+		case 'FontStack':
+			return A2(
+				_elm_lang$core$String$join,
+				',',
+				A2(_elm_lang$core$List$map, quoteMultiWord, _p1._0));
+		case 'Sides':
+			return A2(
+				_elm_lang$core$String$join,
+				' ',
+				A2(_elm_lang$core$List$map, _danielnarey$elm_css_basics$CssBasics$encodeCssValue, _p1._0));
+		case 'Multiple':
+			return A2(
+				_elm_lang$core$String$join,
+				_p1._0,
+				A2(_elm_lang$core$List$map, _danielnarey$elm_css_basics$CssBasics$encodeCssValue, _p1._1));
+		case 'Important':
+			return A2(
+				_elm_lang$core$Basics_ops['++'],
+				_danielnarey$elm_css_basics$CssBasics$encodeCssValue(_p1._0),
+				'!important');
+		default:
+			return 'inherit';
+	}
 };
-var _elm_community$basics_extra$Basics_Extra_ops = _elm_community$basics_extra$Basics_Extra_ops || {};
-_elm_community$basics_extra$Basics_Extra_ops['=>'] = F2(
-	function (v0, v1) {
-		return {ctor: '_Tuple2', _0: v0, _1: v1};
+var _danielnarey$elm_css_basics$CssBasics$encodeDeclaration = function (_p2) {
+	var _p3 = _p2;
+	return _elm_lang$core$String$concat(
+		{
+			ctor: '::',
+			_0: _p3._0,
+			_1: {
+				ctor: '::',
+				_0: ':',
+				_1: {
+					ctor: '::',
+					_0: _danielnarey$elm_css_basics$CssBasics$encodeCssValue(_p3._1),
+					_1: {
+						ctor: '::',
+						_0: ';',
+						_1: {ctor: '[]'}
+					}
+				}
+			}
+		});
+};
+var _danielnarey$elm_css_basics$CssBasics$toStyleAttribute = function (declarationList) {
+	return _elm_lang$html$Html_Attributes$style(
+		A2(
+			_elm_lang$core$List$map,
+			_elm_lang$core$Tuple$mapSecond(_danielnarey$elm_css_basics$CssBasics$encodeCssValue),
+			declarationList));
+};
+var _danielnarey$elm_css_basics$CssBasics$Undefined = {ctor: 'Undefined'};
+var _danielnarey$elm_css_basics$CssBasics$Important = function (a) {
+	return {ctor: 'Important', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$important = function (_p4) {
+	var _p5 = _p4;
+	return {
+		ctor: '_Tuple2',
+		_0: _p5._0,
+		_1: _danielnarey$elm_css_basics$CssBasics$Important(_p5._1)
+	};
+};
+var _danielnarey$elm_css_basics$CssBasics$Multiple = F2(
+	function (a, b) {
+		return {ctor: 'Multiple', _0: a, _1: b};
+	});
+var _danielnarey$elm_css_basics$CssBasics$Sides = function (a) {
+	return {ctor: 'Sides', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$FontStack = function (a) {
+	return {ctor: 'FontStack', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$Unit = F2(
+	function (a, b) {
+		return {ctor: 'Unit', _0: a, _1: b};
+	});
+var _danielnarey$elm_css_basics$CssBasics$Integer = function (a) {
+	return {ctor: 'Integer', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$Num = function (a) {
+	return {ctor: 'Num', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$Col = function (a) {
+	return {ctor: 'Col', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$Str = function (a) {
+	return {ctor: 'Str', _0: a};
+};
+var _danielnarey$elm_css_basics$CssBasics$NoUnit = {ctor: 'NoUnit'};
+var _danielnarey$elm_css_basics$CssBasics$Vmax = {ctor: 'Vmax'};
+var _danielnarey$elm_css_basics$CssBasics$Vmin = {ctor: 'Vmin'};
+var _danielnarey$elm_css_basics$CssBasics$Vw = {ctor: 'Vw'};
+var _danielnarey$elm_css_basics$CssBasics$Vh = {ctor: 'Vh'};
+var _danielnarey$elm_css_basics$CssBasics$Pc = {ctor: 'Pc'};
+var _danielnarey$elm_css_basics$CssBasics$Pt = {ctor: 'Pt'};
+var _danielnarey$elm_css_basics$CssBasics$In = {ctor: 'In'};
+var _danielnarey$elm_css_basics$CssBasics$Mm = {ctor: 'Mm'};
+var _danielnarey$elm_css_basics$CssBasics$Cm = {ctor: 'Cm'};
+var _danielnarey$elm_css_basics$CssBasics$Px = {ctor: 'Px'};
+var _danielnarey$elm_css_basics$CssBasics$Rem = {ctor: 'Rem'};
+var _danielnarey$elm_css_basics$CssBasics$Ch = {ctor: 'Ch'};
+var _danielnarey$elm_css_basics$CssBasics$Ex = {ctor: 'Ex'};
+var _danielnarey$elm_css_basics$CssBasics$Em = {ctor: 'Em'};
+var _danielnarey$elm_css_basics$CssBasics$Percent = {ctor: 'Percent'};
+var _danielnarey$elm_html_tree$Internal_HtmlElement$getAttrValue = F2(
+	function (attrName, htmlElement) {
+		return A2(
+			_elm_lang$core$Dict$get,
+			attrName,
+			_elm_lang$core$Dict$fromList(htmlElement.attributes));
+	});
+var _danielnarey$elm_html_tree$Internal_HtmlElement$getClasses = function (htmlElement) {
+	return htmlElement.classes;
+};
+var _danielnarey$elm_html_tree$Internal_HtmlElement$getTag = function (htmlElement) {
+	return htmlElement.htmlTag;
+};
+var _danielnarey$elm_html_tree$Internal_HtmlElement$getId = function (htmlElement) {
+	return A2(_danielnarey$elm_html_tree$Internal_HtmlElement$getAttrValue, 'id', htmlElement);
+};
+var _danielnarey$elm_html_tree$Internal_HtmlElement$HtmlElement = F8(
+	function (a, b, c, d, e, f, g, h) {
+		return {htmlTag: a, attributes: b, actions: c, classes: d, styles: e, text: f, markdown: g, observer: h};
+	});
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$toBool = function (boolString) {
+	var _p0 = _elm_lang$core$String$toLower(boolString);
+	switch (_p0) {
+		case 'true':
+			return _elm_lang$core$Result$Ok(true);
+		case 'false':
+			return _elm_lang$core$Result$Ok(false);
+		default:
+			return _elm_lang$core$Result$Err('String argument must be \'true\' or \'false\' (case ignored)');
+	}
+};
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$Autocomplete = function (a) {
+	return {ctor: 'Autocomplete', _0: a};
+};
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString = function (a) {
+	return {ctor: 'HtmlString', _0: a};
+};
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString = function (a) {
+	return {ctor: 'JsonString', _0: a};
+};
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool = function (a) {
+	return {ctor: 'JsonBool', _0: a};
+};
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$attributeDict = _elm_lang$core$Dict$fromList(
+	{
+		ctor: '::',
+		_0: {
+			ctor: '_Tuple2',
+			_0: 'checked',
+			_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('checked')
+		},
+		_1: {
+			ctor: '::',
+			_0: {
+				ctor: '_Tuple2',
+				_0: 'hidden',
+				_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('hidden')
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '_Tuple2',
+					_0: 'selected',
+					_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('selected')
+				},
+				_1: {
+					ctor: '::',
+					_0: {
+						ctor: '_Tuple2',
+						_0: 'autocomplete',
+						_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$Autocomplete('autocomplete')
+					},
+					_1: {
+						ctor: '::',
+						_0: {
+							ctor: '_Tuple2',
+							_0: 'autofocus',
+							_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('autofocus')
+						},
+						_1: {
+							ctor: '::',
+							_0: {
+								ctor: '_Tuple2',
+								_0: 'disabled',
+								_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('disabled')
+							},
+							_1: {
+								ctor: '::',
+								_0: {
+									ctor: '_Tuple2',
+									_0: 'multiple',
+									_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('multiple')
+								},
+								_1: {
+									ctor: '::',
+									_0: {
+										ctor: '_Tuple2',
+										_0: 'novalidate',
+										_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('noValidate')
+									},
+									_1: {
+										ctor: '::',
+										_0: {
+											ctor: '_Tuple2',
+											_0: 'readonly',
+											_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('readOnly')
+										},
+										_1: {
+											ctor: '::',
+											_0: {
+												ctor: '_Tuple2',
+												_0: 'required',
+												_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('required')
+											},
+											_1: {
+												ctor: '::',
+												_0: {
+													ctor: '_Tuple2',
+													_0: 'download',
+													_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('download')
+												},
+												_1: {
+													ctor: '::',
+													_0: {
+														ctor: '_Tuple2',
+														_0: 'ismap',
+														_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('isMap')
+													},
+													_1: {
+														ctor: '::',
+														_0: {
+															ctor: '_Tuple2',
+															_0: 'autoplay',
+															_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('autoplay')
+														},
+														_1: {
+															ctor: '::',
+															_0: {
+																ctor: '_Tuple2',
+																_0: 'controls',
+																_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('controls')
+															},
+															_1: {
+																ctor: '::',
+																_0: {
+																	ctor: '_Tuple2',
+																	_0: 'loop',
+																	_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('loop')
+																},
+																_1: {
+																	ctor: '::',
+																	_0: {
+																		ctor: '_Tuple2',
+																		_0: 'default',
+																		_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('default')
+																	},
+																	_1: {
+																		ctor: '::',
+																		_0: {
+																			ctor: '_Tuple2',
+																			_0: 'seamless',
+																			_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('seamless')
+																		},
+																		_1: {
+																			ctor: '::',
+																			_0: {
+																				ctor: '_Tuple2',
+																				_0: 'reversed',
+																				_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('reversed')
+																			},
+																			_1: {
+																				ctor: '::',
+																				_0: {
+																					ctor: '_Tuple2',
+																					_0: 'async',
+																					_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('async')
+																				},
+																				_1: {
+																					ctor: '::',
+																					_0: {
+																						ctor: '_Tuple2',
+																						_0: 'defer',
+																						_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('defer')
+																					},
+																					_1: {
+																						ctor: '::',
+																						_0: {
+																							ctor: '_Tuple2',
+																							_0: 'scoped',
+																							_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('scoped')
+																						},
+																						_1: {
+																							ctor: '::',
+																							_0: {
+																								ctor: '_Tuple2',
+																								_0: 'contenteditable',
+																								_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('contentEditable')
+																							},
+																							_1: {
+																								ctor: '::',
+																								_0: {
+																									ctor: '_Tuple2',
+																									_0: 'spellcheck',
+																									_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonBool('spellcheck')
+																								},
+																								_1: {
+																									ctor: '::',
+																									_0: {
+																										ctor: '_Tuple2',
+																										_0: 'accesskey',
+																										_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('accessKey')
+																									},
+																									_1: {
+																										ctor: '::',
+																										_0: {
+																											ctor: '_Tuple2',
+																											_0: 'maxlength',
+																											_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString('maxlength')
+																										},
+																										_1: {
+																											ctor: '::',
+																											_0: {
+																												ctor: '_Tuple2',
+																												_0: 'minlength',
+																												_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('minLength')
+																											},
+																											_1: {
+																												ctor: '::',
+																												_0: {
+																													ctor: '_Tuple2',
+																													_0: 'size',
+																													_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('size')
+																												},
+																												_1: {
+																													ctor: '::',
+																													_0: {
+																														ctor: '_Tuple2',
+																														_0: 'cols',
+																														_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('cols')
+																													},
+																													_1: {
+																														ctor: '::',
+																														_0: {
+																															ctor: '_Tuple2',
+																															_0: 'rows',
+																															_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('rows')
+																														},
+																														_1: {
+																															ctor: '::',
+																															_0: {
+																																ctor: '_Tuple2',
+																																_0: 'height',
+																																_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('height')
+																															},
+																															_1: {
+																																ctor: '::',
+																																_0: {
+																																	ctor: '_Tuple2',
+																																	_0: 'width',
+																																	_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('width')
+																																},
+																																_1: {
+																																	ctor: '::',
+																																	_0: {
+																																		ctor: '_Tuple2',
+																																		_0: 'start',
+																																		_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('start')
+																																	},
+																																	_1: {
+																																		ctor: '::',
+																																		_0: {
+																																			ctor: '_Tuple2',
+																																			_0: 'colspan',
+																																			_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('colspan')
+																																		},
+																																		_1: {
+																																			ctor: '::',
+																																			_0: {
+																																				ctor: '_Tuple2',
+																																				_0: 'rowspan',
+																																				_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('rowspan')
+																																			},
+																																			_1: {
+																																				ctor: '::',
+																																				_0: {
+																																					ctor: '_Tuple2',
+																																					_0: 'tabindex',
+																																					_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('tabIndex')
+																																				},
+																																				_1: {
+																																					ctor: '::',
+																																					_0: {
+																																						ctor: '_Tuple2',
+																																						_0: 'id',
+																																						_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('id')
+																																					},
+																																					_1: {
+																																						ctor: '::',
+																																						_0: {
+																																							ctor: '_Tuple2',
+																																							_0: 'title',
+																																							_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('title')
+																																						},
+																																						_1: {
+																																							ctor: '::',
+																																							_0: {
+																																								ctor: '_Tuple2',
+																																								_0: 'type',
+																																								_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('type')
+																																							},
+																																							_1: {
+																																								ctor: '::',
+																																								_0: {
+																																									ctor: '_Tuple2',
+																																									_0: 'value',
+																																									_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('value')
+																																								},
+																																								_1: {
+																																									ctor: '::',
+																																									_0: {
+																																										ctor: '_Tuple2',
+																																										_0: 'defaultvalue',
+																																										_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('defaultValue')
+																																									},
+																																									_1: {
+																																										ctor: '::',
+																																										_0: {
+																																											ctor: '_Tuple2',
+																																											_0: 'placeholder',
+																																											_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('placeholder')
+																																										},
+																																										_1: {
+																																											ctor: '::',
+																																											_0: {
+																																												ctor: '_Tuple2',
+																																												_0: 'accept',
+																																												_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('accept')
+																																											},
+																																											_1: {
+																																												ctor: '::',
+																																												_0: {
+																																													ctor: '_Tuple2',
+																																													_0: 'acceptcharset',
+																																													_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('acceptCharset')
+																																												},
+																																												_1: {
+																																													ctor: '::',
+																																													_0: {
+																																														ctor: '_Tuple2',
+																																														_0: 'action',
+																																														_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('action')
+																																													},
+																																													_1: {
+																																														ctor: '::',
+																																														_0: {
+																																															ctor: '_Tuple2',
+																																															_0: 'autosave',
+																																															_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('autosave')
+																																														},
+																																														_1: {
+																																															ctor: '::',
+																																															_0: {
+																																																ctor: '_Tuple2',
+																																																_0: 'enctype',
+																																																_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('enctype')
+																																															},
+																																															_1: {
+																																																ctor: '::',
+																																																_0: {
+																																																	ctor: '_Tuple2',
+																																																	_0: 'formaction',
+																																																	_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('formAction')
+																																																},
+																																																_1: {
+																																																	ctor: '::',
+																																																	_0: {
+																																																		ctor: '_Tuple2',
+																																																		_0: 'list',
+																																																		_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('list')
+																																																	},
+																																																	_1: {
+																																																		ctor: '::',
+																																																		_0: {
+																																																			ctor: '_Tuple2',
+																																																			_0: 'method',
+																																																			_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('method')
+																																																		},
+																																																		_1: {
+																																																			ctor: '::',
+																																																			_0: {
+																																																				ctor: '_Tuple2',
+																																																				_0: 'name',
+																																																				_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('name')
+																																																			},
+																																																			_1: {
+																																																				ctor: '::',
+																																																				_0: {
+																																																					ctor: '_Tuple2',
+																																																					_0: 'pattern',
+																																																					_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('pattern')
+																																																				},
+																																																				_1: {
+																																																					ctor: '::',
+																																																					_0: {
+																																																						ctor: '_Tuple2',
+																																																						_0: 'for',
+																																																						_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('htmlFor')
+																																																					},
+																																																					_1: {
+																																																						ctor: '::',
+																																																						_0: {
+																																																							ctor: '_Tuple2',
+																																																							_0: 'form',
+																																																							_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('form')
+																																																						},
+																																																						_1: {
+																																																							ctor: '::',
+																																																							_0: {
+																																																								ctor: '_Tuple2',
+																																																								_0: 'max',
+																																																								_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString('max')
+																																																							},
+																																																							_1: {
+																																																								ctor: '::',
+																																																								_0: {
+																																																									ctor: '_Tuple2',
+																																																									_0: 'min',
+																																																									_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('min')
+																																																								},
+																																																								_1: {
+																																																									ctor: '::',
+																																																									_0: {
+																																																										ctor: '_Tuple2',
+																																																										_0: 'step',
+																																																										_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('step')
+																																																									},
+																																																									_1: {
+																																																										ctor: '::',
+																																																										_0: {
+																																																											ctor: '_Tuple2',
+																																																											_0: 'wrap',
+																																																											_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('wrap')
+																																																										},
+																																																										_1: {
+																																																											ctor: '::',
+																																																											_0: {
+																																																												ctor: '_Tuple2',
+																																																												_0: 'href',
+																																																												_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('href')
+																																																											},
+																																																											_1: {
+																																																												ctor: '::',
+																																																												_0: {
+																																																													ctor: '_Tuple2',
+																																																													_0: 'target',
+																																																													_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('target')
+																																																												},
+																																																												_1: {
+																																																													ctor: '::',
+																																																													_0: {
+																																																														ctor: '_Tuple2',
+																																																														_0: 'downloadas',
+																																																														_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('downloadAs')
+																																																													},
+																																																													_1: {
+																																																														ctor: '::',
+																																																														_0: {
+																																																															ctor: '_Tuple2',
+																																																															_0: 'hreflang',
+																																																															_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('hreflang')
+																																																														},
+																																																														_1: {
+																																																															ctor: '::',
+																																																															_0: {
+																																																																ctor: '_Tuple2',
+																																																																_0: 'media',
+																																																																_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('media')
+																																																															},
+																																																															_1: {
+																																																																ctor: '::',
+																																																																_0: {
+																																																																	ctor: '_Tuple2',
+																																																																	_0: 'ping',
+																																																																	_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('ping')
+																																																																},
+																																																																_1: {
+																																																																	ctor: '::',
+																																																																	_0: {
+																																																																		ctor: '_Tuple2',
+																																																																		_0: 'rel',
+																																																																		_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('rel')
+																																																																	},
+																																																																	_1: {
+																																																																		ctor: '::',
+																																																																		_0: {
+																																																																			ctor: '_Tuple2',
+																																																																			_0: 'usemap',
+																																																																			_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('useMap')
+																																																																		},
+																																																																		_1: {
+																																																																			ctor: '::',
+																																																																			_0: {
+																																																																				ctor: '_Tuple2',
+																																																																				_0: 'shape',
+																																																																				_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('shape')
+																																																																			},
+																																																																			_1: {
+																																																																				ctor: '::',
+																																																																				_0: {
+																																																																					ctor: '_Tuple2',
+																																																																					_0: 'coords',
+																																																																					_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('coords')
+																																																																				},
+																																																																				_1: {
+																																																																					ctor: '::',
+																																																																					_0: {
+																																																																						ctor: '_Tuple2',
+																																																																						_0: 'src',
+																																																																						_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('src')
+																																																																					},
+																																																																					_1: {
+																																																																						ctor: '::',
+																																																																						_0: {
+																																																																							ctor: '_Tuple2',
+																																																																							_0: 'alt',
+																																																																							_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('alt')
+																																																																						},
+																																																																						_1: {
+																																																																							ctor: '::',
+																																																																							_0: {
+																																																																								ctor: '_Tuple2',
+																																																																								_0: 'preload',
+																																																																								_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('preload')
+																																																																							},
+																																																																							_1: {
+																																																																								ctor: '::',
+																																																																								_0: {
+																																																																									ctor: '_Tuple2',
+																																																																									_0: 'poster',
+																																																																									_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('poster')
+																																																																								},
+																																																																								_1: {
+																																																																									ctor: '::',
+																																																																									_0: {
+																																																																										ctor: '_Tuple2',
+																																																																										_0: 'kind',
+																																																																										_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('kind')
+																																																																									},
+																																																																									_1: {
+																																																																										ctor: '::',
+																																																																										_0: {
+																																																																											ctor: '_Tuple2',
+																																																																											_0: 'srclang',
+																																																																											_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('srclang')
+																																																																										},
+																																																																										_1: {
+																																																																											ctor: '::',
+																																																																											_0: {
+																																																																												ctor: '_Tuple2',
+																																																																												_0: 'sandbox',
+																																																																												_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('sandbox')
+																																																																											},
+																																																																											_1: {
+																																																																												ctor: '::',
+																																																																												_0: {
+																																																																													ctor: '_Tuple2',
+																																																																													_0: 'srcdoc',
+																																																																													_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('srcdoc')
+																																																																												},
+																																																																												_1: {
+																																																																													ctor: '::',
+																																																																													_0: {
+																																																																														ctor: '_Tuple2',
+																																																																														_0: 'align',
+																																																																														_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('align')
+																																																																													},
+																																																																													_1: {
+																																																																														ctor: '::',
+																																																																														_0: {
+																																																																															ctor: '_Tuple2',
+																																																																															_0: 'headers',
+																																																																															_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('headers')
+																																																																														},
+																																																																														_1: {
+																																																																															ctor: '::',
+																																																																															_0: {
+																																																																																ctor: '_Tuple2',
+																																																																																_0: 'scope',
+																																																																																_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('scope')
+																																																																															},
+																																																																															_1: {
+																																																																																ctor: '::',
+																																																																																_0: {
+																																																																																	ctor: '_Tuple2',
+																																																																																	_0: 'charset',
+																																																																																	_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('charset')
+																																																																																},
+																																																																																_1: {
+																																																																																	ctor: '::',
+																																																																																	_0: {
+																																																																																		ctor: '_Tuple2',
+																																																																																		_0: 'content',
+																																																																																		_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('content')
+																																																																																	},
+																																																																																	_1: {
+																																																																																		ctor: '::',
+																																																																																		_0: {
+																																																																																			ctor: '_Tuple2',
+																																																																																			_0: 'httpequiv',
+																																																																																			_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('httpEquiv')
+																																																																																		},
+																																																																																		_1: {
+																																																																																			ctor: '::',
+																																																																																			_0: {
+																																																																																				ctor: '_Tuple2',
+																																																																																				_0: 'language',
+																																																																																				_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('language')
+																																																																																			},
+																																																																																			_1: {
+																																																																																				ctor: '::',
+																																																																																				_0: {
+																																																																																					ctor: '_Tuple2',
+																																																																																					_0: 'contextmenu',
+																																																																																					_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString('contextmenu')
+																																																																																				},
+																																																																																				_1: {
+																																																																																					ctor: '::',
+																																																																																					_0: {
+																																																																																						ctor: '_Tuple2',
+																																																																																						_0: 'dir',
+																																																																																						_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('dir')
+																																																																																					},
+																																																																																					_1: {
+																																																																																						ctor: '::',
+																																																																																						_0: {
+																																																																																							ctor: '_Tuple2',
+																																																																																							_0: 'draggable',
+																																																																																							_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('draggable')
+																																																																																						},
+																																																																																						_1: {
+																																																																																							ctor: '::',
+																																																																																							_0: {
+																																																																																								ctor: '_Tuple2',
+																																																																																								_0: 'dropzone',
+																																																																																								_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('dropzone')
+																																																																																							},
+																																																																																							_1: {
+																																																																																								ctor: '::',
+																																																																																								_0: {
+																																																																																									ctor: '_Tuple2',
+																																																																																									_0: 'itemprop',
+																																																																																									_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('itemprop')
+																																																																																								},
+																																																																																								_1: {
+																																																																																									ctor: '::',
+																																																																																									_0: {
+																																																																																										ctor: '_Tuple2',
+																																																																																										_0: 'lang',
+																																																																																										_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('lang')
+																																																																																									},
+																																																																																									_1: {
+																																																																																										ctor: '::',
+																																																																																										_0: {
+																																																																																											ctor: '_Tuple2',
+																																																																																											_0: 'challenge',
+																																																																																											_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('challenge')
+																																																																																										},
+																																																																																										_1: {
+																																																																																											ctor: '::',
+																																																																																											_0: {
+																																																																																												ctor: '_Tuple2',
+																																																																																												_0: 'keytype',
+																																																																																												_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('keytype')
+																																																																																											},
+																																																																																											_1: {
+																																																																																												ctor: '::',
+																																																																																												_0: {
+																																																																																													ctor: '_Tuple2',
+																																																																																													_0: 'cite',
+																																																																																													_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('cite')
+																																																																																												},
+																																																																																												_1: {
+																																																																																													ctor: '::',
+																																																																																													_0: {
+																																																																																														ctor: '_Tuple2',
+																																																																																														_0: 'datetime',
+																																																																																														_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString('datetime')
+																																																																																													},
+																																																																																													_1: {
+																																																																																														ctor: '::',
+																																																																																														_0: {
+																																																																																															ctor: '_Tuple2',
+																																																																																															_0: 'pubdate',
+																																																																																															_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString('pubdate')
+																																																																																														},
+																																																																																														_1: {
+																																																																																															ctor: '::',
+																																																																																															_0: {
+																																																																																																ctor: '_Tuple2',
+																																																																																																_0: 'manifest',
+																																																																																																_1: _danielnarey$elm_html_tree$Internal_AttributeLookup$JsonString('manifest')
+																																																																																															},
+																																																																																															_1: {ctor: '[]'}
+																																																																																														}
+																																																																																													}
+																																																																																												}
+																																																																																											}
+																																																																																										}
+																																																																																									}
+																																																																																								}
+																																																																																							}
+																																																																																						}
+																																																																																					}
+																																																																																				}
+																																																																																			}
+																																																																																		}
+																																																																																	}
+																																																																																}
+																																																																															}
+																																																																														}
+																																																																													}
+																																																																												}
+																																																																											}
+																																																																										}
+																																																																									}
+																																																																								}
+																																																																							}
+																																																																						}
+																																																																					}
+																																																																				}
+																																																																			}
+																																																																		}
+																																																																	}
+																																																																}
+																																																															}
+																																																														}
+																																																													}
+																																																												}
+																																																											}
+																																																										}
+																																																									}
+																																																								}
+																																																							}
+																																																						}
+																																																					}
+																																																				}
+																																																			}
+																																																		}
+																																																	}
+																																																}
+																																															}
+																																														}
+																																													}
+																																												}
+																																											}
+																																										}
+																																									}
+																																								}
+																																							}
+																																						}
+																																					}
+																																				}
+																																			}
+																																		}
+																																	}
+																																}
+																															}
+																														}
+																													}
+																												}
+																											}
+																										}
+																									}
+																								}
+																							}
+																						}
+																					}
+																				}
+																			}
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	});
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$getValueType = function (name) {
+	var valueType = A2(
+		_elm_lang$core$Dict$get,
+		_elm_lang$core$String$toLower(name),
+		_danielnarey$elm_html_tree$Internal_AttributeLookup$attributeDict);
+	var _p1 = valueType;
+	if (_p1.ctor === 'Just') {
+		return _p1._0;
+	} else {
+		return _danielnarey$elm_html_tree$Internal_AttributeLookup$HtmlString(name);
+	}
+};
+var _danielnarey$elm_html_tree$Internal_AttributeLookup$toAttribute = function (_p2) {
+	var _p3 = _p2;
+	var _p6 = _p3._1;
+	var _p4 = _danielnarey$elm_html_tree$Internal_AttributeLookup$getValueType(_p3._0);
+	switch (_p4.ctor) {
+		case 'JsonBool':
+			return A2(
+				_elm_lang$html$Html_Attributes$property,
+				_p4._0,
+				_elm_lang$core$Json_Encode$bool(
+					A2(
+						_elm_lang$core$Result$withDefault,
+						false,
+						_danielnarey$elm_html_tree$Internal_AttributeLookup$toBool(_p6))));
+		case 'JsonString':
+			return A2(
+				_elm_lang$html$Html_Attributes$property,
+				_p4._0,
+				_elm_lang$core$Json_Encode$string(_p6));
+		case 'HtmlString':
+			return A2(_elm_lang$html$Html_Attributes$attribute, _p4._0, _p6);
+		default:
+			var _p5 = _p4._0;
+			return (A2(
+				_elm_lang$core$Result$withDefault,
+				false,
+				_danielnarey$elm_html_tree$Internal_AttributeLookup$toBool(_p6)) || _elm_lang$core$Native_Utils.eq(
+				_elm_lang$core$String$toLower(_p6),
+				'on')) ? A2(
+				_elm_lang$html$Html_Attributes$property,
+				_p5,
+				_elm_lang$core$Json_Encode$string('on')) : A2(
+				_elm_lang$html$Html_Attributes$property,
+				_p5,
+				_elm_lang$core$Json_Encode$string('off'));
+	}
+};
+var _danielnarey$elm_html_tree$Internal_Util$removeMatchingKeys = F2(
+	function (matchList, keyValList) {
+		return A2(
+			_elm_lang$core$List$filter,
+			function (_p0) {
+				var _p1 = _p0;
+				return !A2(_elm_lang$core$List$member, _p1._0, matchList);
+			},
+			keyValList);
+	});
+var _danielnarey$elm_html_tree$Internal_Util$removeMatchingEntries = F2(
+	function (matchList, valList) {
+		return A2(
+			_elm_lang$core$List$filter,
+			function (n) {
+				return !A2(_elm_lang$core$List$member, n, matchList);
+			},
+			valList);
+	});
+var _danielnarey$elm_html_tree$Internal_Util$filterByCondition = function (conditionalList) {
+	return A2(
+		_elm_lang$core$List$concatMap,
+		function (_p2) {
+			var _p3 = _p2;
+			return _p3._0 ? {
+				ctor: '::',
+				_0: _p3._1,
+				_1: {ctor: '[]'}
+			} : {ctor: '[]'};
+		},
+		conditionalList);
+};
+var _elm_lang$html$Html_Events$keyCode = A2(_elm_lang$core$Json_Decode$field, 'keyCode', _elm_lang$core$Json_Decode$int);
+var _elm_lang$html$Html_Events$targetChecked = A2(
+	_elm_lang$core$Json_Decode$at,
+	{
+		ctor: '::',
+		_0: 'target',
+		_1: {
+			ctor: '::',
+			_0: 'checked',
+			_1: {ctor: '[]'}
+		}
+	},
+	_elm_lang$core$Json_Decode$bool);
+var _elm_lang$html$Html_Events$targetValue = A2(
+	_elm_lang$core$Json_Decode$at,
+	{
+		ctor: '::',
+		_0: 'target',
+		_1: {
+			ctor: '::',
+			_0: 'value',
+			_1: {ctor: '[]'}
+		}
+	},
+	_elm_lang$core$Json_Decode$string);
+var _elm_lang$html$Html_Events$defaultOptions = _elm_lang$virtual_dom$VirtualDom$defaultOptions;
+var _elm_lang$html$Html_Events$onWithOptions = _elm_lang$virtual_dom$VirtualDom$onWithOptions;
+var _elm_lang$html$Html_Events$on = _elm_lang$virtual_dom$VirtualDom$on;
+var _elm_lang$html$Html_Events$onFocus = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'focus',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onBlur = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'blur',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onSubmitOptions = _elm_lang$core$Native_Utils.update(
+	_elm_lang$html$Html_Events$defaultOptions,
+	{preventDefault: true});
+var _elm_lang$html$Html_Events$onSubmit = function (msg) {
+	return A3(
+		_elm_lang$html$Html_Events$onWithOptions,
+		'submit',
+		_elm_lang$html$Html_Events$onSubmitOptions,
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onCheck = function (tagger) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'change',
+		A2(_elm_lang$core$Json_Decode$map, tagger, _elm_lang$html$Html_Events$targetChecked));
+};
+var _elm_lang$html$Html_Events$onInput = function (tagger) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'input',
+		A2(_elm_lang$core$Json_Decode$map, tagger, _elm_lang$html$Html_Events$targetValue));
+};
+var _elm_lang$html$Html_Events$onMouseOut = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'mouseout',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onMouseOver = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'mouseover',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onMouseLeave = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'mouseleave',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onMouseEnter = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'mouseenter',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onMouseUp = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'mouseup',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onMouseDown = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'mousedown',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onDoubleClick = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'dblclick',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$onClick = function (msg) {
+	return A2(
+		_elm_lang$html$Html_Events$on,
+		'click',
+		_elm_lang$core$Json_Decode$succeed(msg));
+};
+var _elm_lang$html$Html_Events$Options = F2(
+	function (a, b) {
+		return {stopPropagation: a, preventDefault: b};
+	});
+var _evancz$elm_markdown$Native_Markdown = function() {
+
+
+// VIRTUAL-DOM WIDGETS
+
+function toHtml(options, factList, rawMarkdown)
+{
+	var model = {
+		options: options,
+		markdown: rawMarkdown
+	};
+	return _elm_lang$virtual_dom$Native_VirtualDom.custom(factList, model, implementation);
+}
+
+
+// WIDGET IMPLEMENTATION
+
+var implementation = {
+	render: render,
+	diff: diff
+};
+
+function render(model)
+{
+	var html = marked(model.markdown, formatOptions(model.options));
+	var div = document.createElement('div');
+	div.innerHTML = html;
+	return div;
+}
+
+function diff(a, b)
+{
+	
+	if (a.model.markdown === b.model.markdown && a.model.options === b.model.options)
+	{
+		return null;
+	}
+
+	return {
+		applyPatch: applyPatch,
+		data: marked(b.model.markdown, formatOptions(b.model.options))
+	};
+}
+
+function applyPatch(domNode, data)
+{
+	domNode.innerHTML = data;
+	return domNode;
+}
+
+
+// ACTUAL MARKDOWN PARSER
+
+var marked = function() {
+	// catch the `marked` object regardless of the outer environment.
+	// (ex. a CommonJS module compatible environment.)
+	// note that this depends on marked's implementation of environment detection.
+	var module = {};
+	var exports = module.exports = {};
+
+	/**
+	 * marked - a markdown parser
+	 * Copyright (c) 2011-2014, Christopher Jeffrey. (MIT Licensed)
+	 * https://github.com/chjj/marked
+	 */
+	(function(){var block={newline:/^\n+/,code:/^( {4}[^\n]+\n*)+/,fences:noop,hr:/^( *[-*_]){3,} *(?:\n+|$)/,heading:/^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)/,nptable:noop,lheading:/^([^\n]+)\n *(=|-){2,} *(?:\n+|$)/,blockquote:/^( *>[^\n]+(\n(?!def)[^\n]+)*\n*)+/,list:/^( *)(bull) [\s\S]+?(?:hr|def|\n{2,}(?! )(?!\1bull )\n*|\s*$)/,html:/^ *(?:comment|closed|closing) *(?:\n{2,}|\s*$)/,def:/^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +["(]([^\n]+)[")])? *(?:\n+|$)/,table:noop,paragraph:/^((?:[^\n]+\n?(?!hr|heading|lheading|blockquote|tag|def))+)\n*/,text:/^[^\n]+/};block.bullet=/(?:[*+-]|\d+\.)/;block.item=/^( *)(bull) [^\n]*(?:\n(?!\1bull )[^\n]*)*/;block.item=replace(block.item,"gm")(/bull/g,block.bullet)();block.list=replace(block.list)(/bull/g,block.bullet)("hr","\\n+(?=\\1?(?:[-*_] *){3,}(?:\\n+|$))")("def","\\n+(?="+block.def.source+")")();block.blockquote=replace(block.blockquote)("def",block.def)();block._tag="(?!(?:"+"a|em|strong|small|s|cite|q|dfn|abbr|data|time|code"+"|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo"+"|span|br|wbr|ins|del|img)\\b)\\w+(?!:/|[^\\w\\s@]*@)\\b";block.html=replace(block.html)("comment",/<!--[\s\S]*?-->/)("closed",/<(tag)[\s\S]+?<\/\1>/)("closing",/<tag(?:"[^"]*"|'[^']*'|[^'">])*?>/)(/tag/g,block._tag)();block.paragraph=replace(block.paragraph)("hr",block.hr)("heading",block.heading)("lheading",block.lheading)("blockquote",block.blockquote)("tag","<"+block._tag)("def",block.def)();block.normal=merge({},block);block.gfm=merge({},block.normal,{fences:/^ *(`{3,}|~{3,}) *(\S+)? *\n([\s\S]+?)\s*\1 *(?:\n+|$)/,paragraph:/^/});block.gfm.paragraph=replace(block.paragraph)("(?!","(?!"+block.gfm.fences.source.replace("\\1","\\2")+"|"+block.list.source.replace("\\1","\\3")+"|")();block.tables=merge({},block.gfm,{nptable:/^ *(\S.*\|.*)\n *([-:]+ *\|[-| :]*)\n((?:.*\|.*(?:\n|$))*)\n*/,table:/^ *\|(.+)\n *\|( *[-:]+[-| :]*)\n((?: *\|.*(?:\n|$))*)\n*/});function Lexer(options){this.tokens=[];this.tokens.links={};this.options=options||marked.defaults;this.rules=block.normal;if(this.options.gfm){if(this.options.tables){this.rules=block.tables}else{this.rules=block.gfm}}}Lexer.rules=block;Lexer.lex=function(src,options){var lexer=new Lexer(options);return lexer.lex(src)};Lexer.prototype.lex=function(src){src=src.replace(/\r\n|\r/g,"\n").replace(/\t/g,"    ").replace(/\u00a0/g," ").replace(/\u2424/g,"\n");return this.token(src,true)};Lexer.prototype.token=function(src,top,bq){var src=src.replace(/^ +$/gm,""),next,loose,cap,bull,b,item,space,i,l;while(src){if(cap=this.rules.newline.exec(src)){src=src.substring(cap[0].length);if(cap[0].length>1){this.tokens.push({type:"space"})}}if(cap=this.rules.code.exec(src)){src=src.substring(cap[0].length);cap=cap[0].replace(/^ {4}/gm,"");this.tokens.push({type:"code",text:!this.options.pedantic?cap.replace(/\n+$/,""):cap});continue}if(cap=this.rules.fences.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:"code",lang:cap[2],text:cap[3]});continue}if(cap=this.rules.heading.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:"heading",depth:cap[1].length,text:cap[2]});continue}if(top&&(cap=this.rules.nptable.exec(src))){src=src.substring(cap[0].length);item={type:"table",header:cap[1].replace(/^ *| *\| *$/g,"").split(/ *\| */),align:cap[2].replace(/^ *|\| *$/g,"").split(/ *\| */),cells:cap[3].replace(/\n$/,"").split("\n")};for(i=0;i<item.align.length;i++){if(/^ *-+: *$/.test(item.align[i])){item.align[i]="right"}else if(/^ *:-+: *$/.test(item.align[i])){item.align[i]="center"}else if(/^ *:-+ *$/.test(item.align[i])){item.align[i]="left"}else{item.align[i]=null}}for(i=0;i<item.cells.length;i++){item.cells[i]=item.cells[i].split(/ *\| */)}this.tokens.push(item);continue}if(cap=this.rules.lheading.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:"heading",depth:cap[2]==="="?1:2,text:cap[1]});continue}if(cap=this.rules.hr.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:"hr"});continue}if(cap=this.rules.blockquote.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:"blockquote_start"});cap=cap[0].replace(/^ *> ?/gm,"");this.token(cap,top,true);this.tokens.push({type:"blockquote_end"});continue}if(cap=this.rules.list.exec(src)){src=src.substring(cap[0].length);bull=cap[2];this.tokens.push({type:"list_start",ordered:bull.length>1});cap=cap[0].match(this.rules.item);next=false;l=cap.length;i=0;for(;i<l;i++){item=cap[i];space=item.length;item=item.replace(/^ *([*+-]|\d+\.) +/,"");if(~item.indexOf("\n ")){space-=item.length;item=!this.options.pedantic?item.replace(new RegExp("^ {1,"+space+"}","gm"),""):item.replace(/^ {1,4}/gm,"")}if(this.options.smartLists&&i!==l-1){b=block.bullet.exec(cap[i+1])[0];if(bull!==b&&!(bull.length>1&&b.length>1)){src=cap.slice(i+1).join("\n")+src;i=l-1}}loose=next||/\n\n(?!\s*$)/.test(item);if(i!==l-1){next=item.charAt(item.length-1)==="\n";if(!loose)loose=next}this.tokens.push({type:loose?"loose_item_start":"list_item_start"});this.token(item,false,bq);this.tokens.push({type:"list_item_end"})}this.tokens.push({type:"list_end"});continue}if(cap=this.rules.html.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:this.options.sanitize?"paragraph":"html",pre:cap[1]==="pre"||cap[1]==="script"||cap[1]==="style",text:cap[0]});continue}if(!bq&&top&&(cap=this.rules.def.exec(src))){src=src.substring(cap[0].length);this.tokens.links[cap[1].toLowerCase()]={href:cap[2],title:cap[3]};continue}if(top&&(cap=this.rules.table.exec(src))){src=src.substring(cap[0].length);item={type:"table",header:cap[1].replace(/^ *| *\| *$/g,"").split(/ *\| */),align:cap[2].replace(/^ *|\| *$/g,"").split(/ *\| */),cells:cap[3].replace(/(?: *\| *)?\n$/,"").split("\n")};for(i=0;i<item.align.length;i++){if(/^ *-+: *$/.test(item.align[i])){item.align[i]="right"}else if(/^ *:-+: *$/.test(item.align[i])){item.align[i]="center"}else if(/^ *:-+ *$/.test(item.align[i])){item.align[i]="left"}else{item.align[i]=null}}for(i=0;i<item.cells.length;i++){item.cells[i]=item.cells[i].replace(/^ *\| *| *\| *$/g,"").split(/ *\| */)}this.tokens.push(item);continue}if(top&&(cap=this.rules.paragraph.exec(src))){src=src.substring(cap[0].length);this.tokens.push({type:"paragraph",text:cap[1].charAt(cap[1].length-1)==="\n"?cap[1].slice(0,-1):cap[1]});continue}if(cap=this.rules.text.exec(src)){src=src.substring(cap[0].length);this.tokens.push({type:"text",text:cap[0]});continue}if(src){throw new Error("Infinite loop on byte: "+src.charCodeAt(0))}}return this.tokens};var inline={escape:/^\\([\\`*{}\[\]()#+\-.!_>])/,autolink:/^<([^ >]+(@|:\/)[^ >]+)>/,url:noop,tag:/^<!--[\s\S]*?-->|^<\/?\w+(?:"[^"]*"|'[^']*'|[^'">])*?>/,link:/^!?\[(inside)\]\(href\)/,reflink:/^!?\[(inside)\]\s*\[([^\]]*)\]/,nolink:/^!?\[((?:\[[^\]]*\]|[^\[\]])*)\]/,strong:/^__([\s\S]+?)__(?!_)|^\*\*([\s\S]+?)\*\*(?!\*)/,em:/^\b_((?:__|[\s\S])+?)_\b|^\*((?:\*\*|[\s\S])+?)\*(?!\*)/,code:/^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)/,br:/^ {2,}\n(?!\s*$)/,del:noop,text:/^[\s\S]+?(?=[\\<!\[_*`]| {2,}\n|$)/};inline._inside=/(?:\[[^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*/;inline._href=/\s*<?([\s\S]*?)>?(?:\s+['"]([\s\S]*?)['"])?\s*/;inline.link=replace(inline.link)("inside",inline._inside)("href",inline._href)();inline.reflink=replace(inline.reflink)("inside",inline._inside)();inline.normal=merge({},inline);inline.pedantic=merge({},inline.normal,{strong:/^__(?=\S)([\s\S]*?\S)__(?!_)|^\*\*(?=\S)([\s\S]*?\S)\*\*(?!\*)/,em:/^_(?=\S)([\s\S]*?\S)_(?!_)|^\*(?=\S)([\s\S]*?\S)\*(?!\*)/});inline.gfm=merge({},inline.normal,{escape:replace(inline.escape)("])","~|])")(),url:/^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/,del:/^~~(?=\S)([\s\S]*?\S)~~/,text:replace(inline.text)("]|","~]|")("|","|https?://|")()});inline.breaks=merge({},inline.gfm,{br:replace(inline.br)("{2,}","*")(),text:replace(inline.gfm.text)("{2,}","*")()});function InlineLexer(links,options){this.options=options||marked.defaults;this.links=links;this.rules=inline.normal;this.renderer=this.options.renderer||new Renderer;this.renderer.options=this.options;if(!this.links){throw new Error("Tokens array requires a `links` property.")}if(this.options.gfm){if(this.options.breaks){this.rules=inline.breaks}else{this.rules=inline.gfm}}else if(this.options.pedantic){this.rules=inline.pedantic}}InlineLexer.rules=inline;InlineLexer.output=function(src,links,options){var inline=new InlineLexer(links,options);return inline.output(src)};InlineLexer.prototype.output=function(src){var out="",link,text,href,cap;while(src){if(cap=this.rules.escape.exec(src)){src=src.substring(cap[0].length);out+=cap[1];continue}if(cap=this.rules.autolink.exec(src)){src=src.substring(cap[0].length);if(cap[2]==="@"){text=cap[1].charAt(6)===":"?this.mangle(cap[1].substring(7)):this.mangle(cap[1]);href=this.mangle("mailto:")+text}else{text=escape(cap[1]);href=text}out+=this.renderer.link(href,null,text);continue}if(!this.inLink&&(cap=this.rules.url.exec(src))){src=src.substring(cap[0].length);text=escape(cap[1]);href=text;out+=this.renderer.link(href,null,text);continue}if(cap=this.rules.tag.exec(src)){if(!this.inLink&&/^<a /i.test(cap[0])){this.inLink=true}else if(this.inLink&&/^<\/a>/i.test(cap[0])){this.inLink=false}src=src.substring(cap[0].length);out+=this.options.sanitize?escape(cap[0]):cap[0];continue}if(cap=this.rules.link.exec(src)){src=src.substring(cap[0].length);this.inLink=true;out+=this.outputLink(cap,{href:cap[2],title:cap[3]});this.inLink=false;continue}if((cap=this.rules.reflink.exec(src))||(cap=this.rules.nolink.exec(src))){src=src.substring(cap[0].length);link=(cap[2]||cap[1]).replace(/\s+/g," ");link=this.links[link.toLowerCase()];if(!link||!link.href){out+=cap[0].charAt(0);src=cap[0].substring(1)+src;continue}this.inLink=true;out+=this.outputLink(cap,link);this.inLink=false;continue}if(cap=this.rules.strong.exec(src)){src=src.substring(cap[0].length);out+=this.renderer.strong(this.output(cap[2]||cap[1]));continue}if(cap=this.rules.em.exec(src)){src=src.substring(cap[0].length);out+=this.renderer.em(this.output(cap[2]||cap[1]));continue}if(cap=this.rules.code.exec(src)){src=src.substring(cap[0].length);out+=this.renderer.codespan(escape(cap[2],true));continue}if(cap=this.rules.br.exec(src)){src=src.substring(cap[0].length);out+=this.renderer.br();continue}if(cap=this.rules.del.exec(src)){src=src.substring(cap[0].length);out+=this.renderer.del(this.output(cap[1]));continue}if(cap=this.rules.text.exec(src)){src=src.substring(cap[0].length);out+=escape(this.smartypants(cap[0]));continue}if(src){throw new Error("Infinite loop on byte: "+src.charCodeAt(0))}}return out};InlineLexer.prototype.outputLink=function(cap,link){var href=escape(link.href),title=link.title?escape(link.title):null;return cap[0].charAt(0)!=="!"?this.renderer.link(href,title,this.output(cap[1])):this.renderer.image(href,title,escape(cap[1]))};InlineLexer.prototype.smartypants=function(text){if(!this.options.smartypants)return text;return text.replace(/--/g,"—").replace(/(^|[-\u2014/(\[{"\s])'/g,"$1‘").replace(/'/g,"’").replace(/(^|[-\u2014/(\[{\u2018\s])"/g,"$1“").replace(/"/g,"”").replace(/\.{3}/g,"…")};InlineLexer.prototype.mangle=function(text){var out="",l=text.length,i=0,ch;for(;i<l;i++){ch=text.charCodeAt(i);if(Math.random()>.5){ch="x"+ch.toString(16)}out+="&#"+ch+";"}return out};function Renderer(options){this.options=options||{}}Renderer.prototype.code=function(code,lang,escaped){if(this.options.highlight){var out=this.options.highlight(code,lang);if(out!=null&&out!==code){escaped=true;code=out}}if(!lang){return"<pre><code>"+(escaped?code:escape(code,true))+"\n</code></pre>"}return'<pre><code class="'+this.options.langPrefix+escape(lang,true)+'">'+(escaped?code:escape(code,true))+"\n</code></pre>\n"};Renderer.prototype.blockquote=function(quote){return"<blockquote>\n"+quote+"</blockquote>\n"};Renderer.prototype.html=function(html){return html};Renderer.prototype.heading=function(text,level,raw){return"<h"+level+' id="'+this.options.headerPrefix+raw.toLowerCase().replace(/[^\w]+/g,"-")+'">'+text+"</h"+level+">\n"};Renderer.prototype.hr=function(){return this.options.xhtml?"<hr/>\n":"<hr>\n"};Renderer.prototype.list=function(body,ordered){var type=ordered?"ol":"ul";return"<"+type+">\n"+body+"</"+type+">\n"};Renderer.prototype.listitem=function(text){return"<li>"+text+"</li>\n"};Renderer.prototype.paragraph=function(text){return"<p>"+text+"</p>\n"};Renderer.prototype.table=function(header,body){return"<table>\n"+"<thead>\n"+header+"</thead>\n"+"<tbody>\n"+body+"</tbody>\n"+"</table>\n"};Renderer.prototype.tablerow=function(content){return"<tr>\n"+content+"</tr>\n"};Renderer.prototype.tablecell=function(content,flags){var type=flags.header?"th":"td";var tag=flags.align?"<"+type+' style="text-align:'+flags.align+'">':"<"+type+">";return tag+content+"</"+type+">\n"};Renderer.prototype.strong=function(text){return"<strong>"+text+"</strong>"};Renderer.prototype.em=function(text){return"<em>"+text+"</em>"};Renderer.prototype.codespan=function(text){return"<code>"+text+"</code>"};Renderer.prototype.br=function(){return this.options.xhtml?"<br/>":"<br>"};Renderer.prototype.del=function(text){return"<del>"+text+"</del>"};Renderer.prototype.link=function(href,title,text){if(this.options.sanitize){try{var prot=decodeURIComponent(unescape(href)).replace(/[^\w:]/g,"").toLowerCase()}catch(e){return""}if(prot.indexOf("javascript:")===0){return""}}var out='<a href="'+href+'"';if(title){out+=' title="'+title+'"'}out+=">"+text+"</a>";return out};Renderer.prototype.image=function(href,title,text){var out='<img src="'+href+'" alt="'+text+'"';if(title){out+=' title="'+title+'"'}out+=this.options.xhtml?"/>":">";return out};function Parser(options){this.tokens=[];this.token=null;this.options=options||marked.defaults;this.options.renderer=this.options.renderer||new Renderer;this.renderer=this.options.renderer;this.renderer.options=this.options}Parser.parse=function(src,options,renderer){var parser=new Parser(options,renderer);return parser.parse(src)};Parser.prototype.parse=function(src){this.inline=new InlineLexer(src.links,this.options,this.renderer);this.tokens=src.reverse();var out="";while(this.next()){out+=this.tok()}return out};Parser.prototype.next=function(){return this.token=this.tokens.pop()};Parser.prototype.peek=function(){return this.tokens[this.tokens.length-1]||0};Parser.prototype.parseText=function(){var body=this.token.text;while(this.peek().type==="text"){body+="\n"+this.next().text}return this.inline.output(body)};Parser.prototype.tok=function(){switch(this.token.type){case"space":{return""}case"hr":{return this.renderer.hr()}case"heading":{return this.renderer.heading(this.inline.output(this.token.text),this.token.depth,this.token.text)}case"code":{return this.renderer.code(this.token.text,this.token.lang,this.token.escaped)}case"table":{var header="",body="",i,row,cell,flags,j;cell="";for(i=0;i<this.token.header.length;i++){flags={header:true,align:this.token.align[i]};cell+=this.renderer.tablecell(this.inline.output(this.token.header[i]),{header:true,align:this.token.align[i]})}header+=this.renderer.tablerow(cell);for(i=0;i<this.token.cells.length;i++){row=this.token.cells[i];cell="";for(j=0;j<row.length;j++){cell+=this.renderer.tablecell(this.inline.output(row[j]),{header:false,align:this.token.align[j]})}body+=this.renderer.tablerow(cell)}return this.renderer.table(header,body)}case"blockquote_start":{var body="";while(this.next().type!=="blockquote_end"){body+=this.tok()}return this.renderer.blockquote(body)}case"list_start":{var body="",ordered=this.token.ordered;while(this.next().type!=="list_end"){body+=this.tok()}return this.renderer.list(body,ordered)}case"list_item_start":{var body="";while(this.next().type!=="list_item_end"){body+=this.token.type==="text"?this.parseText():this.tok()}return this.renderer.listitem(body)}case"loose_item_start":{var body="";while(this.next().type!=="list_item_end"){body+=this.tok()}return this.renderer.listitem(body)}case"html":{var html=!this.token.pre&&!this.options.pedantic?this.inline.output(this.token.text):this.token.text;return this.renderer.html(html)}case"paragraph":{return this.renderer.paragraph(this.inline.output(this.token.text))}case"text":{return this.renderer.paragraph(this.parseText())}}};function escape(html,encode){return html.replace(!encode?/&(?!#?\w+;)/g:/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}function unescape(html){return html.replace(/&([#\w]+);/g,function(_,n){n=n.toLowerCase();if(n==="colon")return":";if(n.charAt(0)==="#"){return n.charAt(1)==="x"?String.fromCharCode(parseInt(n.substring(2),16)):String.fromCharCode(+n.substring(1))}return""})}function replace(regex,opt){regex=regex.source;opt=opt||"";return function self(name,val){if(!name)return new RegExp(regex,opt);val=val.source||val;val=val.replace(/(^|[^\[])\^/g,"$1");regex=regex.replace(name,val);return self}}function noop(){}noop.exec=noop;function merge(obj){var i=1,target,key;for(;i<arguments.length;i++){target=arguments[i];for(key in target){if(Object.prototype.hasOwnProperty.call(target,key)){obj[key]=target[key]}}}return obj}function marked(src,opt,callback){if(callback||typeof opt==="function"){if(!callback){callback=opt;opt=null}opt=merge({},marked.defaults,opt||{});var highlight=opt.highlight,tokens,pending,i=0;try{tokens=Lexer.lex(src,opt)}catch(e){return callback(e)}pending=tokens.length;var done=function(err){if(err){opt.highlight=highlight;return callback(err)}var out;try{out=Parser.parse(tokens,opt)}catch(e){err=e}opt.highlight=highlight;return err?callback(err):callback(null,out)};if(!highlight||highlight.length<3){return done()}delete opt.highlight;if(!pending)return done();for(;i<tokens.length;i++){(function(token){if(token.type!=="code"){return--pending||done()}return highlight(token.text,token.lang,function(err,code){if(err)return done(err);if(code==null||code===token.text){return--pending||done()}token.text=code;token.escaped=true;--pending||done()})})(tokens[i])}return}try{if(opt)opt=merge({},marked.defaults,opt);return Parser.parse(Lexer.lex(src,opt),opt)}catch(e){e.message+="\nPlease report this to https://github.com/chjj/marked.";if((opt||marked.defaults).silent){return"<p>An error occured:</p><pre>"+escape(e.message+"",true)+"</pre>"}throw e}}marked.options=marked.setOptions=function(opt){merge(marked.defaults,opt);return marked};marked.defaults={gfm:true,tables:true,breaks:false,pedantic:false,sanitize:false,smartLists:false,silent:false,highlight:null,langPrefix:"lang-",smartypants:false,headerPrefix:"",renderer:new Renderer,xhtml:false};marked.Parser=Parser;marked.parser=Parser.parse;marked.Renderer=Renderer;marked.Lexer=Lexer;marked.lexer=Lexer.lex;marked.InlineLexer=InlineLexer;marked.inlineLexer=InlineLexer.output;marked.parse=marked;if(typeof module!=="undefined"&&typeof exports==="object"){module.exports=marked}else if(typeof define==="function"&&define.amd){define(function(){return marked})}else{this.marked=marked}}).call(function(){return this||(typeof window!=="undefined"?window:global)}());
+
+	return module.exports;
+}();
+
+
+// FORMAT OPTIONS FOR MARKED IMPLEMENTATION
+
+function formatOptions(options)
+{
+	function toHighlight(code, lang)
+	{
+		if (!lang && options.defaultHighlighting.ctor === 'Just')
+		{
+			lang = options.defaultHighlighting._0;
+		}
+
+		if (typeof hljs !== 'undefined' && lang && hljs.listLanguages().indexOf(lang) >= 0)
+		{
+			return hljs.highlight(lang, code, true).value;
+		}
+
+		return code;
+	}
+
+	var gfm = options.githubFlavored;
+	if (gfm.ctor === 'Just')
+	{
+		return {
+			highlight: toHighlight,
+			gfm: true,
+			tables: gfm._0.tables,
+			breaks: gfm._0.breaks,
+			sanitize: options.sanitize,
+			smartypants: options.smartypants
+		};
+	}
+
+	return {
+		highlight: toHighlight,
+		gfm: false,
+		tables: false,
+		breaks: false,
+		sanitize: options.sanitize,
+		smartypants: options.smartypants
+	};
+}
+
+
+// EXPORTS
+
+return {
+	toHtml: F3(toHtml)
+};
+
+}();
+var _evancz$elm_markdown$Markdown$toHtmlWith = _evancz$elm_markdown$Native_Markdown.toHtml;
+var _evancz$elm_markdown$Markdown$defaultOptions = {
+	githubFlavored: _elm_lang$core$Maybe$Just(
+		{tables: false, breaks: false}),
+	defaultHighlighting: _elm_lang$core$Maybe$Nothing,
+	sanitize: false,
+	smartypants: false
+};
+var _evancz$elm_markdown$Markdown$toHtml = F2(
+	function (attrs, string) {
+		return A3(_evancz$elm_markdown$Native_Markdown.toHtml, _evancz$elm_markdown$Markdown$defaultOptions, attrs, string);
+	});
+var _evancz$elm_markdown$Markdown$Options = F4(
+	function (a, b, c, d) {
+		return {githubFlavored: a, defaultHighlighting: b, sanitize: c, smartypants: d};
+	});
+var _danielnarey$elm_html_tree$HtmlTree$renderNode = F2(
+	function (htmlElement, childList) {
+		var resolveObserver = function (maybeObserver) {
+			var _p0 = maybeObserver;
+			if (_p0.ctor === 'Just') {
+				return _elm_lang$core$List$singleton(_p0._0);
+			} else {
+				return {ctor: '[]'};
+			}
+		};
+		var toAction = function (_p1) {
+			var _p2 = _p1;
+			return A2(
+				_elm_lang$html$Html_Events$on,
+				_p2._0,
+				_elm_lang$core$Json_Decode$succeed(_p2._1));
+		};
+		var styleAttribute = _elm_lang$core$List$isEmpty(htmlElement.styles) ? {ctor: '[]'} : _elm_lang$core$List$singleton(
+			_elm_lang$html$Html_Attributes$style(htmlElement.styles));
+		var classAttribute = _elm_lang$core$List$isEmpty(htmlElement.classes) ? {ctor: '[]'} : _elm_lang$core$List$singleton(
+			_elm_lang$html$Html_Attributes$class(
+				A2(_elm_lang$core$String$join, ' ', htmlElement.classes)));
+		var attributes = _elm_lang$core$List$concat(
+			{
+				ctor: '::',
+				_0: classAttribute,
+				_1: {
+					ctor: '::',
+					_0: styleAttribute,
+					_1: {
+						ctor: '::',
+						_0: A2(_elm_lang$core$List$map, _danielnarey$elm_html_tree$Internal_AttributeLookup$toAttribute, htmlElement.attributes),
+						_1: {
+							ctor: '::',
+							_0: A2(_elm_lang$core$List$map, toAction, htmlElement.actions),
+							_1: {
+								ctor: '::',
+								_0: resolveObserver(htmlElement.observer),
+								_1: {ctor: '[]'}
+							}
+						}
+					}
+				}
+			});
+		return A3(_elm_lang$html$Html$node, htmlElement.htmlTag, attributes, childList);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$assembleHtml = function (htmlTree) {
+	var renderText = F2(
+		function (isMarkdown, maybeText) {
+			var _p3 = maybeText;
+			if (_p3.ctor === 'Just') {
+				return _elm_lang$core$List$singleton(
+					(isMarkdown ? _evancz$elm_markdown$Markdown$toHtml(
+						{ctor: '[]'}) : _elm_lang$html$Html$text)(_p3._0));
+			} else {
+				return {ctor: '[]'};
+			}
+		});
+	var _p4 = htmlTree;
+	switch (_p4.ctor) {
+		case 'Opaque':
+			return _p4._0;
+		case 'Leaf':
+			var _p5 = _p4._0;
+			return _danielnarey$elm_html_tree$HtmlTree$renderNode(_p5)(
+				A2(renderText, _p5.markdown, _p5.text));
+		default:
+			var _p6 = _p4._0;
+			return _danielnarey$elm_html_tree$HtmlTree$renderNode(_p6)(
+				A2(
+					F2(
+						function (x, y) {
+							return A2(_elm_lang$core$Basics_ops['++'], x, y);
+						}),
+					A2(renderText, _p6.markdown, _p6.text),
+					A2(_elm_lang$core$List$map, _danielnarey$elm_html_tree$HtmlTree$assembleHtml, _p4._1)));
+	}
+};
+var _danielnarey$elm_html_tree$HtmlTree$Stem = F2(
+	function (a, b) {
+		return {ctor: 'Stem', _0: a, _1: b};
+	});
+var _danielnarey$elm_html_tree$HtmlTree$container = F2(
+	function (htmlTag, childList) {
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree$Stem,
+			{
+				htmlTag: htmlTag,
+				attributes: {ctor: '[]'},
+				actions: {ctor: '[]'},
+				classes: {ctor: '[]'},
+				styles: {ctor: '[]'},
+				text: _elm_lang$core$Maybe$Nothing,
+				markdown: false,
+				observer: _elm_lang$core$Maybe$Nothing
+			},
+			childList);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withChildren = F2(
+	function (newChildList, htmlTree) {
+		var _p7 = htmlTree;
+		switch (_p7.ctor) {
+			case 'Leaf':
+				return A2(_danielnarey$elm_html_tree$HtmlTree$Stem, _p7._0, newChildList);
+			case 'Stem':
+				return A2(_danielnarey$elm_html_tree$HtmlTree$Stem, _p7._0, newChildList);
+			default:
+				return htmlTree;
+		}
+	});
+var _danielnarey$elm_html_tree$HtmlTree$appendChild = F2(
+	function (newChild, htmlTree) {
+		var _p8 = htmlTree;
+		switch (_p8.ctor) {
+			case 'Leaf':
+				return A2(
+					_danielnarey$elm_html_tree$HtmlTree$Stem,
+					_p8._0,
+					_elm_lang$core$List$singleton(newChild));
+			case 'Stem':
+				return A2(
+					_danielnarey$elm_html_tree$HtmlTree$Stem,
+					_p8._0,
+					A2(
+						_elm_lang$core$List$append,
+						_p8._1,
+						_elm_lang$core$List$singleton(newChild)));
+			default:
+				return htmlTree;
+		}
+	});
+var _danielnarey$elm_html_tree$HtmlTree$prependChild = F2(
+	function (newChild, htmlTree) {
+		var _p9 = htmlTree;
+		switch (_p9.ctor) {
+			case 'Leaf':
+				return A2(
+					_danielnarey$elm_html_tree$HtmlTree$Stem,
+					_p9._0,
+					_elm_lang$core$List$singleton(newChild));
+			case 'Stem':
+				return A2(
+					_danielnarey$elm_html_tree$HtmlTree$Stem,
+					_p9._0,
+					A2(
+						F2(
+							function (x, y) {
+								return {ctor: '::', _0: x, _1: y};
+							}),
+						newChild,
+						_p9._1));
+			default:
+				return htmlTree;
+		}
+	});
+var _danielnarey$elm_html_tree$HtmlTree$Leaf = function (a) {
+	return {ctor: 'Leaf', _0: a};
+};
+var _danielnarey$elm_html_tree$HtmlTree$leaf = function (htmlTag) {
+	return _danielnarey$elm_html_tree$HtmlTree$Leaf(
+		{
+			htmlTag: htmlTag,
+			attributes: {ctor: '[]'},
+			actions: {ctor: '[]'},
+			classes: {ctor: '[]'},
+			styles: {ctor: '[]'},
+			text: _elm_lang$core$Maybe$Nothing,
+			markdown: false,
+			observer: _elm_lang$core$Maybe$Nothing
+		});
+};
+var _danielnarey$elm_html_tree$HtmlTree$textWrapper = F2(
+	function (htmlTag, textString) {
+		return _danielnarey$elm_html_tree$HtmlTree$Leaf(
+			{
+				htmlTag: htmlTag,
+				attributes: {ctor: '[]'},
+				actions: {ctor: '[]'},
+				classes: {ctor: '[]'},
+				styles: {ctor: '[]'},
+				text: _elm_lang$core$Maybe$Just(textString),
+				markdown: false,
+				observer: _elm_lang$core$Maybe$Nothing
+			});
+	});
+var _danielnarey$elm_html_tree$HtmlTree$modifyRoot = F2(
+	function (updateFunction, htmlTree) {
+		var _p10 = htmlTree;
+		switch (_p10.ctor) {
+			case 'Leaf':
+				return _danielnarey$elm_html_tree$HtmlTree$Leaf(
+					updateFunction(_p10._0));
+			case 'Stem':
+				return function (elem) {
+					return A2(_danielnarey$elm_html_tree$HtmlTree$Stem, elem, _p10._1);
+				}(
+					updateFunction(_p10._0));
+			default:
+				return htmlTree;
+		}
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withText = F2(
+	function (newText, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					text: _elm_lang$core$Maybe$Just(newText)
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$appendText = F2(
+	function (newText, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					text: function () {
+						var _p11 = htmlElement.text;
+						if (_p11.ctor === 'Nothing') {
+							return _elm_lang$core$Maybe$Just(newText);
+						} else {
+							return _elm_lang$core$Maybe$Just(
+								A2(_elm_lang$core$Basics_ops['++'], _p11._0, newText));
+						}
+					}()
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$prependText = F2(
+	function (newText, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					text: function () {
+						var _p12 = htmlElement.text;
+						if (_p12.ctor === 'Nothing') {
+							return _elm_lang$core$Maybe$Just(newText);
+						} else {
+							return _elm_lang$core$Maybe$Just(
+								A2(_elm_lang$core$Basics_ops['++'], newText, _p12._0));
+						}
+					}()
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$textAsMarkdown = function (htmlTree) {
+	var updateFunction = function (htmlElement) {
+		return _elm_lang$core$Native_Utils.update(
+			htmlElement,
+			{markdown: true});
+	};
+	return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+};
+var _danielnarey$elm_html_tree$HtmlTree$withAttributes = F2(
+	function (attributeList, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{attributes: attributeList});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$addAttribute = F2(
+	function (newAttribute, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					attributes: A2(
+						_elm_lang$core$List$append,
+						A2(
+							_danielnarey$elm_html_tree$Internal_Util$removeMatchingKeys,
+							{
+								ctor: '::',
+								_0: _elm_lang$core$Tuple$first(newAttribute),
+								_1: {ctor: '[]'}
+							},
+							htmlElement.attributes),
+						_elm_lang$core$List$singleton(newAttribute))
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withId = F2(
+	function (idString, htmlTree) {
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree$addAttribute,
+			{ctor: '_Tuple2', _0: 'id', _1: idString},
+			htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withActions = F2(
+	function (actionList, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{actions: actionList});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$addAction = F2(
+	function (newAction, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					actions: A2(
+						_elm_lang$core$List$append,
+						A2(
+							_danielnarey$elm_html_tree$Internal_Util$removeMatchingKeys,
+							{
+								ctor: '::',
+								_0: _elm_lang$core$Tuple$first(newAction),
+								_1: {ctor: '[]'}
+							},
+							htmlElement.actions),
+						_elm_lang$core$List$singleton(newAction))
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withObserver = F2(
+	function (newObserver, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					observer: _elm_lang$core$Maybe$Just(newObserver)
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withClasses = F2(
+	function (classList, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{classes: classList});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$addClass = F2(
+	function (newClass, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					classes: A2(
+						_elm_lang$core$List$append,
+						htmlElement.classes,
+						_elm_lang$core$List$singleton(newClass))
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$removeClass = F2(
+	function (classToRemove, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					classes: A2(
+						_danielnarey$elm_html_tree$Internal_Util$removeMatchingEntries,
+						{
+							ctor: '::',
+							_0: classToRemove,
+							_1: {ctor: '[]'}
+						},
+						htmlElement.classes)
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withStyles = F2(
+	function (styleList, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					styles: A2(
+						_elm_lang$core$List$map,
+						_elm_lang$core$Tuple$mapSecond(_danielnarey$elm_css_basics$CssBasics$encodeCssValue),
+						styleList)
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$addStyle = F2(
+	function (newStyle, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{
+					styles: A2(
+						_elm_lang$core$List$append,
+						A2(
+							_danielnarey$elm_html_tree$Internal_Util$removeMatchingKeys,
+							{
+								ctor: '::',
+								_0: _elm_lang$core$Tuple$first(newStyle),
+								_1: {ctor: '[]'}
+							},
+							htmlElement.styles),
+						_elm_lang$core$List$singleton(
+							A2(_elm_lang$core$Tuple$mapSecond, _danielnarey$elm_css_basics$CssBasics$encodeCssValue, newStyle)))
+				});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$withTag = F2(
+	function (newTag, htmlTree) {
+		var updateFunction = function (htmlElement) {
+			return _elm_lang$core$Native_Utils.update(
+				htmlElement,
+				{htmlTag: newTag});
+		};
+		return A2(_danielnarey$elm_html_tree$HtmlTree$modifyRoot, updateFunction, htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree$Opaque = function (a) {
+	return {ctor: 'Opaque', _0: a};
+};
+var _danielnarey$elm_html_tree$HtmlTree$opaque = function (node) {
+	return _danielnarey$elm_html_tree$HtmlTree$Opaque(node);
+};
+var _danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching = F2(
+	function (_p0, htmlTree) {
+		var _p1 = _p0;
+		var _p5 = _p1._1;
+		var _p4 = _p1._0;
+		var _p2 = htmlTree;
+		switch (_p2.ctor) {
+			case 'Leaf':
+				return (_p4(_p2._0) ? _p5 : _elm_lang$core$Basics$identity)(htmlTree);
+			case 'Stem':
+				var _p3 = _p2._0;
+				return (_p4(_p3) ? _p5 : _elm_lang$core$Basics$identity)(
+					A2(
+						_danielnarey$elm_html_tree$HtmlTree$Stem,
+						_p3,
+						A2(
+							_elm_lang$core$List$map,
+							_danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching(
+								{ctor: '_Tuple2', _0: _p4, _1: _p5}),
+							_p2._1)));
+			default:
+				return htmlTree;
+		}
+	});
+var _danielnarey$elm_html_tree$HtmlTree_Modify$allNodes = F2(
+	function (modifyFunction, htmlTree) {
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching,
+			{
+				ctor: '_Tuple2',
+				_0: _elm_lang$core$Basics$always(true),
+				_1: modifyFunction
+			},
+			htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree_Modify$matchingAttrValue = F3(
+	function (_p6, modifyFunction, htmlTree) {
+		var _p7 = _p6;
+		var matchAttrValue = F2(
+			function (_p8, htmlElement) {
+				var _p9 = _p8;
+				return A2(
+					_elm_lang$core$Maybe$withDefault,
+					false,
+					A2(
+						_elm_lang$core$Maybe$map,
+						F2(
+							function (x, y) {
+								return _elm_lang$core$Native_Utils.eq(x, y);
+							})(_p9._1),
+						A2(_danielnarey$elm_html_tree$Internal_HtmlElement$getAttrValue, _p9._0, htmlElement)));
+			});
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching,
+			{
+				ctor: '_Tuple2',
+				_0: matchAttrValue(
+					{ctor: '_Tuple2', _0: _p7._0, _1: _p7._1}),
+				_1: modifyFunction
+			},
+			htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree_Modify$matchingClass = F3(
+	function ($class, modifyFunction, htmlTree) {
+		var matchClass = F2(
+			function (string, htmlElement) {
+				return A2(
+					_elm_lang$core$List$member,
+					string,
+					_danielnarey$elm_html_tree$Internal_HtmlElement$getClasses(htmlElement));
+			});
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching,
+			{
+				ctor: '_Tuple2',
+				_0: matchClass($class),
+				_1: modifyFunction
+			},
+			htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree_Modify$matchingTag = F3(
+	function (tag, modifyFunction, htmlTree) {
+		var matchTag = F2(
+			function (string, htmlElement) {
+				return A2(
+					F2(
+						function (x, y) {
+							return _elm_lang$core$Native_Utils.eq(x, y);
+						}),
+					string,
+					_danielnarey$elm_html_tree$Internal_HtmlElement$getTag(htmlElement));
+			});
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching,
+			{
+				ctor: '_Tuple2',
+				_0: matchTag(tag),
+				_1: modifyFunction
+			},
+			htmlTree);
+	});
+var _danielnarey$elm_html_tree$HtmlTree_Modify$matchingId = F3(
+	function (idString, modifyFunction, htmlTree) {
+		var matchId = F2(
+			function (string, htmlElement) {
+				return A2(
+					_elm_lang$core$Maybe$withDefault,
+					false,
+					A2(
+						_elm_lang$core$Maybe$map,
+						F2(
+							function (x, y) {
+								return _elm_lang$core$Native_Utils.eq(x, y);
+							})(string),
+						_danielnarey$elm_html_tree$Internal_HtmlElement$getId(htmlElement)));
+			});
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree_Modify$modifyMatching,
+			{
+				ctor: '_Tuple2',
+				_0: matchId(idString),
+				_1: modifyFunction
+			},
+			htmlTree);
 	});
 var _elm_lang$core$Task$onError = _elm_lang$core$Native_Scheduler.onError;
 var _elm_lang$core$Task$andThen = _elm_lang$core$Native_Scheduler.andThen;
@@ -9707,333 +11935,6 @@ var _elm_lang$core$Task$cmdMap = F2(
 			A2(_elm_lang$core$Task$map, tagger, _p11._0));
 	});
 _elm_lang$core$Native_Platform.effectManagers['Task'] = {pkg: 'elm-lang/core', init: _elm_lang$core$Task$init, onEffects: _elm_lang$core$Task$onEffects, onSelfMsg: _elm_lang$core$Task$onSelfMsg, tag: 'cmd', cmdMap: _elm_lang$core$Task$cmdMap};
-//import Native.Scheduler //
-
-var _elm_lang$core$Native_Time = function() {
-
-var now = _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
-{
-	callback(_elm_lang$core$Native_Scheduler.succeed(Date.now()));
-});
-
-function setInterval_(interval, task)
-{
-	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
-	{
-		var id = setInterval(function() {
-			_elm_lang$core$Native_Scheduler.rawSpawn(task);
-		}, interval);
-
-		return function() { clearInterval(id); };
-	});
-}
-
-return {
-	now: now,
-	setInterval_: F2(setInterval_)
-};
-
-}();var _elm_lang$core$Time$setInterval = _elm_lang$core$Native_Time.setInterval_;
-var _elm_lang$core$Time$spawnHelp = F3(
-	function (router, intervals, processes) {
-		var _p0 = intervals;
-		if (_p0.ctor === '[]') {
-			return _elm_lang$core$Task$succeed(processes);
-		} else {
-			var _p1 = _p0._0;
-			var spawnRest = function (id) {
-				return A3(
-					_elm_lang$core$Time$spawnHelp,
-					router,
-					_p0._1,
-					A3(_elm_lang$core$Dict$insert, _p1, id, processes));
-			};
-			var spawnTimer = _elm_lang$core$Native_Scheduler.spawn(
-				A2(
-					_elm_lang$core$Time$setInterval,
-					_p1,
-					A2(_elm_lang$core$Platform$sendToSelf, router, _p1)));
-			return A2(_elm_lang$core$Task$andThen, spawnRest, spawnTimer);
-		}
-	});
-var _elm_lang$core$Time$addMySub = F2(
-	function (_p2, state) {
-		var _p3 = _p2;
-		var _p6 = _p3._1;
-		var _p5 = _p3._0;
-		var _p4 = A2(_elm_lang$core$Dict$get, _p5, state);
-		if (_p4.ctor === 'Nothing') {
-			return A3(
-				_elm_lang$core$Dict$insert,
-				_p5,
-				{
-					ctor: '::',
-					_0: _p6,
-					_1: {ctor: '[]'}
-				},
-				state);
-		} else {
-			return A3(
-				_elm_lang$core$Dict$insert,
-				_p5,
-				{ctor: '::', _0: _p6, _1: _p4._0},
-				state);
-		}
-	});
-var _elm_lang$core$Time$inMilliseconds = function (t) {
-	return t;
-};
-var _elm_lang$core$Time$millisecond = 1;
-var _elm_lang$core$Time$second = 1000 * _elm_lang$core$Time$millisecond;
-var _elm_lang$core$Time$minute = 60 * _elm_lang$core$Time$second;
-var _elm_lang$core$Time$hour = 60 * _elm_lang$core$Time$minute;
-var _elm_lang$core$Time$inHours = function (t) {
-	return t / _elm_lang$core$Time$hour;
-};
-var _elm_lang$core$Time$inMinutes = function (t) {
-	return t / _elm_lang$core$Time$minute;
-};
-var _elm_lang$core$Time$inSeconds = function (t) {
-	return t / _elm_lang$core$Time$second;
-};
-var _elm_lang$core$Time$now = _elm_lang$core$Native_Time.now;
-var _elm_lang$core$Time$onSelfMsg = F3(
-	function (router, interval, state) {
-		var _p7 = A2(_elm_lang$core$Dict$get, interval, state.taggers);
-		if (_p7.ctor === 'Nothing') {
-			return _elm_lang$core$Task$succeed(state);
-		} else {
-			var tellTaggers = function (time) {
-				return _elm_lang$core$Task$sequence(
-					A2(
-						_elm_lang$core$List$map,
-						function (tagger) {
-							return A2(
-								_elm_lang$core$Platform$sendToApp,
-								router,
-								tagger(time));
-						},
-						_p7._0));
-			};
-			return A2(
-				_elm_lang$core$Task$andThen,
-				function (_p8) {
-					return _elm_lang$core$Task$succeed(state);
-				},
-				A2(_elm_lang$core$Task$andThen, tellTaggers, _elm_lang$core$Time$now));
-		}
-	});
-var _elm_lang$core$Time$subscription = _elm_lang$core$Native_Platform.leaf('Time');
-var _elm_lang$core$Time$State = F2(
-	function (a, b) {
-		return {taggers: a, processes: b};
-	});
-var _elm_lang$core$Time$init = _elm_lang$core$Task$succeed(
-	A2(_elm_lang$core$Time$State, _elm_lang$core$Dict$empty, _elm_lang$core$Dict$empty));
-var _elm_lang$core$Time$onEffects = F3(
-	function (router, subs, _p9) {
-		var _p10 = _p9;
-		var rightStep = F3(
-			function (_p12, id, _p11) {
-				var _p13 = _p11;
-				return {
-					ctor: '_Tuple3',
-					_0: _p13._0,
-					_1: _p13._1,
-					_2: A2(
-						_elm_lang$core$Task$andThen,
-						function (_p14) {
-							return _p13._2;
-						},
-						_elm_lang$core$Native_Scheduler.kill(id))
-				};
-			});
-		var bothStep = F4(
-			function (interval, taggers, id, _p15) {
-				var _p16 = _p15;
-				return {
-					ctor: '_Tuple3',
-					_0: _p16._0,
-					_1: A3(_elm_lang$core$Dict$insert, interval, id, _p16._1),
-					_2: _p16._2
-				};
-			});
-		var leftStep = F3(
-			function (interval, taggers, _p17) {
-				var _p18 = _p17;
-				return {
-					ctor: '_Tuple3',
-					_0: {ctor: '::', _0: interval, _1: _p18._0},
-					_1: _p18._1,
-					_2: _p18._2
-				};
-			});
-		var newTaggers = A3(_elm_lang$core$List$foldl, _elm_lang$core$Time$addMySub, _elm_lang$core$Dict$empty, subs);
-		var _p19 = A6(
-			_elm_lang$core$Dict$merge,
-			leftStep,
-			bothStep,
-			rightStep,
-			newTaggers,
-			_p10.processes,
-			{
-				ctor: '_Tuple3',
-				_0: {ctor: '[]'},
-				_1: _elm_lang$core$Dict$empty,
-				_2: _elm_lang$core$Task$succeed(
-					{ctor: '_Tuple0'})
-			});
-		var spawnList = _p19._0;
-		var existingDict = _p19._1;
-		var killTask = _p19._2;
-		return A2(
-			_elm_lang$core$Task$andThen,
-			function (newProcesses) {
-				return _elm_lang$core$Task$succeed(
-					A2(_elm_lang$core$Time$State, newTaggers, newProcesses));
-			},
-			A2(
-				_elm_lang$core$Task$andThen,
-				function (_p20) {
-					return A3(_elm_lang$core$Time$spawnHelp, router, spawnList, existingDict);
-				},
-				killTask));
-	});
-var _elm_lang$core$Time$Every = F2(
-	function (a, b) {
-		return {ctor: 'Every', _0: a, _1: b};
-	});
-var _elm_lang$core$Time$every = F2(
-	function (interval, tagger) {
-		return _elm_lang$core$Time$subscription(
-			A2(_elm_lang$core$Time$Every, interval, tagger));
-	});
-var _elm_lang$core$Time$subMap = F2(
-	function (f, _p21) {
-		var _p22 = _p21;
-		return A2(
-			_elm_lang$core$Time$Every,
-			_p22._0,
-			function (_p23) {
-				return f(
-					_p22._1(_p23));
-			});
-	});
-_elm_lang$core$Native_Platform.effectManagers['Time'] = {pkg: 'elm-lang/core', init: _elm_lang$core$Time$init, onEffects: _elm_lang$core$Time$onEffects, onSelfMsg: _elm_lang$core$Time$onSelfMsg, tag: 'sub', subMap: _elm_lang$core$Time$subMap};
-var _elm_lang$html$Html_Events$keyCode = A2(_elm_lang$core$Json_Decode$field, 'keyCode', _elm_lang$core$Json_Decode$int);
-var _elm_lang$html$Html_Events$targetChecked = A2(
-	_elm_lang$core$Json_Decode$at,
-	{
-		ctor: '::',
-		_0: 'target',
-		_1: {
-			ctor: '::',
-			_0: 'checked',
-			_1: {ctor: '[]'}
-		}
-	},
-	_elm_lang$core$Json_Decode$bool);
-var _elm_lang$html$Html_Events$targetValue = A2(
-	_elm_lang$core$Json_Decode$at,
-	{
-		ctor: '::',
-		_0: 'target',
-		_1: {
-			ctor: '::',
-			_0: 'value',
-			_1: {ctor: '[]'}
-		}
-	},
-	_elm_lang$core$Json_Decode$string);
-var _elm_lang$html$Html_Events$defaultOptions = _elm_lang$virtual_dom$VirtualDom$defaultOptions;
-var _elm_lang$html$Html_Events$onWithOptions = _elm_lang$virtual_dom$VirtualDom$onWithOptions;
-var _elm_lang$html$Html_Events$on = _elm_lang$virtual_dom$VirtualDom$on;
-var _elm_lang$html$Html_Events$onFocus = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'focus',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onBlur = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'blur',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onSubmitOptions = _elm_lang$core$Native_Utils.update(
-	_elm_lang$html$Html_Events$defaultOptions,
-	{preventDefault: true});
-var _elm_lang$html$Html_Events$onSubmit = function (msg) {
-	return A3(
-		_elm_lang$html$Html_Events$onWithOptions,
-		'submit',
-		_elm_lang$html$Html_Events$onSubmitOptions,
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onCheck = function (tagger) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'change',
-		A2(_elm_lang$core$Json_Decode$map, tagger, _elm_lang$html$Html_Events$targetChecked));
-};
-var _elm_lang$html$Html_Events$onInput = function (tagger) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'input',
-		A2(_elm_lang$core$Json_Decode$map, tagger, _elm_lang$html$Html_Events$targetValue));
-};
-var _elm_lang$html$Html_Events$onMouseOut = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'mouseout',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onMouseOver = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'mouseover',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onMouseLeave = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'mouseleave',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onMouseEnter = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'mouseenter',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onMouseUp = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'mouseup',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onMouseDown = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'mousedown',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onDoubleClick = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'dblclick',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$onClick = function (msg) {
-	return A2(
-		_elm_lang$html$Html_Events$on,
-		'click',
-		_elm_lang$core$Json_Decode$succeed(msg));
-};
-var _elm_lang$html$Html_Events$Options = F2(
-	function (a, b) {
-		return {stopPropagation: a, preventDefault: b};
-	});
 var _etaque$elm_response$Response$res = F2(
 	function (model, cmd) {
 		return {ctor: '_Tuple2', _0: model, _1: cmd};
@@ -10070,45 +11971,412 @@ var _etaque$elm_response$Response$mapModel = function (onModel) {
 var _etaque$elm_response$Response$mapCmd = function (onCmd) {
 	return A2(_etaque$elm_response$Response$mapBoth, _elm_lang$core$Basics$identity, onCmd);
 };
-var _user$project$Novel$toString = function (novel) {
-	var _p0 = novel;
-	switch (_p0.ctor) {
-		case 'Return':
-			return '';
-		case 'Text':
-			return A2(
-				_elm_lang$core$Basics_ops['++'],
-				_p0._0,
+var _user$project$ViewTree$cardImageTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$card.image,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$cardContentTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$card.content,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$cardFooterItemLeaf = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$card.footer.item,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('a'));
+var _user$project$ViewTree$cardFooterTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$card.footer.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('footer'));
+var _user$project$ViewTree$cardHeaderTitleLeaf = function (title) {
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		_danielnarey$elm_bulma_classes$BulmaClasses$card.header.title,
+		A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', title));
+};
+var _user$project$ViewTree$cardHeaderTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$card.header.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('header'));
+var _user$project$ViewTree$cardTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$card.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$textareaLeaf = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$textarea.ui,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('textarea'));
+var _user$project$ViewTree$controlContainerTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$control.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$controlTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$control.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('p'));
+var _user$project$ViewTree$tileTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$tile.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$tileAncestorTree = A2(_danielnarey$elm_html_tree$HtmlTree$addClass, _danielnarey$elm_bulma_classes$BulmaClasses$tile.level.isAncestor, _user$project$ViewTree$tileTree);
+var _user$project$ViewTree$tileParentTree = A2(_danielnarey$elm_html_tree$HtmlTree$addClass, _danielnarey$elm_bulma_classes$BulmaClasses$tile.level.isParent, _user$project$ViewTree$tileTree);
+var _user$project$ViewTree$tileChildTree = A2(_danielnarey$elm_html_tree$HtmlTree$addClass, _danielnarey$elm_bulma_classes$BulmaClasses$tile.level.isChild, _user$project$ViewTree$tileTree);
+var _user$project$ViewTree$featureTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$feature.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$levelItemTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$level.item,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$levelRightTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$level.right,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$levelLeftTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$level.left,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$levelTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$level.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$heroFootTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$hero.foot,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$heroBodyTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$hero.body,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$heroHeadTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$hero.head,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$heroTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$addClass,
+	_danielnarey$elm_bulma_classes$BulmaClasses$hero.container,
+	_danielnarey$elm_html_tree$HtmlTree$leaf('section'));
+var _user$project$ViewTree$navItemTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$nav.item.container,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('a'));
+var _user$project$ViewTree$navToggleTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$nav.toggle,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('span'));
+var _user$project$ViewTree$navCenterTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$nav.center,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$navRightTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$nav.right,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$navMenuTree = A2(_danielnarey$elm_html_tree$HtmlTree$addClass, _danielnarey$elm_bulma_classes$BulmaClasses$nav.menu.container, _user$project$ViewTree$navRightTree);
+var _user$project$ViewTree$navLeftTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$nav.left,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('div'));
+var _user$project$ViewTree$navTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$nav.container,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('nav'));
+var _user$project$ViewTree$footerTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$footer.container,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('footer'));
+var _user$project$ViewTree$sectionTree = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$section.container,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('section'));
+var _user$project$ViewTree$buttonLeaf = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$button.ui,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('button'));
+var _user$project$ViewTree$deleteLeaf = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$delete.ui,
+		_1: {ctor: '[]'}
+	},
+	_danielnarey$elm_html_tree$HtmlTree$leaf('button'));
+var _user$project$ViewTree$tagLeaf = A2(
+	_danielnarey$elm_html_tree$HtmlTree$withClasses,
+	{
+		ctor: '::',
+		_0: _danielnarey$elm_bulma_classes$BulmaClasses$tag.ui,
+		_1: {ctor: '[]'}
+	},
+	A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'span', 'Tag Label'));
+var _user$project$ViewTree$iconLeaf = function (name) {
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$withClasses,
+		{
+			ctor: '::',
+			_0: _danielnarey$elm_bulma_classes$BulmaClasses$icon.container,
+			_1: {ctor: '[]'}
+		},
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$container,
+			'span',
+			_elm_lang$core$List$singleton(
 				A2(
-					_elm_lang$core$Basics_ops['++'],
-					'\n',
-					_user$project$Novel$toString(_p0._1)));
-		case 'Line':
-			return A2(
-				_elm_lang$core$Basics_ops['++'],
-				'[ ',
+					_danielnarey$elm_html_tree$HtmlTree$withClasses,
+					{
+						ctor: '::',
+						_0: 'fa',
+						_1: {
+							ctor: '::',
+							_0: A2(_elm_lang$core$Basics_ops['++'], 'fa-', name),
+							_1: {ctor: '[]'}
+						}
+					},
+					_danielnarey$elm_html_tree$HtmlTree$leaf('i')))));
+};
+var _user$project$ViewTree$cardHeaderIconLeaf = function (icon) {
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		_danielnarey$elm_bulma_classes$BulmaClasses$card.header.icon,
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$container,
+			'a',
+			_elm_lang$core$List$singleton(
+				_user$project$ViewTree$iconLeaf(icon))));
+};
+var _user$project$View$styleLeaf = function (url) {
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$addAttribute,
+		{ctor: '_Tuple2', _0: 'href', _1: url},
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$addAttribute,
+			{ctor: '_Tuple2', _0: 'type', _1: 'text/css'},
+			A2(
+				_danielnarey$elm_html_tree$HtmlTree$addAttribute,
+				{ctor: '_Tuple2', _0: 'rel', _1: 'stylesheet'},
+				_danielnarey$elm_html_tree$HtmlTree$leaf('link'))));
+};
+var _user$project$View$cdnTree = function () {
+	var fontAwesome = _user$project$View$styleLeaf('https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css');
+	var bulma = _user$project$View$styleLeaf('https://cdnjs.cloudflare.com/ajax/libs/bulma/0.3.0/css/bulma.min.css');
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$container,
+		'div',
+		{
+			ctor: '::',
+			_0: bulma,
+			_1: {
+				ctor: '::',
+				_0: fontAwesome,
+				_1: {ctor: '[]'}
+			}
+		});
+}();
+var _user$project$View$appendParent = _elm_lang$core$Basics$flip(_danielnarey$elm_html_tree$HtmlTree$appendChild);
+var _user$project$View$heroHeader = function () {
+	var body = A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		_danielnarey$elm_bulma_classes$BulmaClasses$element.alignment.hasTextCentered,
+		A2(
+			_user$project$View$appendParent,
+			_user$project$ViewTree$heroBodyTree,
+			A2(
+				_danielnarey$elm_html_tree$HtmlTree$withClasses,
+				{
+					ctor: '::',
+					_0: _danielnarey$elm_bulma_classes$BulmaClasses$heading.title,
+					_1: {
+						ctor: '::',
+						_0: _danielnarey$elm_bulma_classes$BulmaClasses$heading.size.is1,
+						_1: {ctor: '[]'}
+					}
+				},
+				A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'h1', 'Novel Engine'))));
+	var head = A2(
+		_user$project$View$appendParent,
+		_user$project$ViewTree$heroHeadTree,
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$addClass,
+			_danielnarey$elm_bulma_classes$BulmaClasses$nav.style.hasShadow,
+			A2(
+				_user$project$View$appendParent,
+				_user$project$ViewTree$navTree,
 				A2(
-					_elm_lang$core$Basics_ops['++'],
-					_p0._0,
+					_user$project$View$appendParent,
+					_user$project$ViewTree$navRightTree,
 					A2(
-						_elm_lang$core$Basics_ops['++'],
-						' ] : ',
+						_danielnarey$elm_html_tree$HtmlTree$addAttribute,
+						{ctor: '_Tuple2', _0: 'href', _1: 'https://github.com/miyamoen/elm-novel-engine'},
 						A2(
-							_elm_lang$core$Basics_ops['++'],
-							_p0._1,
-							A2(
-								_elm_lang$core$Basics_ops['++'],
-								'\n',
-								_user$project$Novel$toString(_p0._2))))));
-		default:
-			return '▼';
+							_user$project$View$appendParent,
+							_user$project$ViewTree$navItemTree,
+							_user$project$ViewTree$iconLeaf('github')))))));
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$appendChild,
+		body,
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$appendChild,
+			head,
+			A2(_danielnarey$elm_html_tree$HtmlTree$addClass, _danielnarey$elm_bulma_classes$BulmaClasses$hero.color.isPrimary, _user$project$ViewTree$heroTree)));
+}();
+var _user$project$View$novelInputCard = function (text) {
+	var content = A2(
+		_user$project$View$appendParent,
+		_user$project$ViewTree$cardContentTree,
+		A2(
+			_user$project$View$appendParent,
+			_user$project$ViewTree$controlTree,
+			A2(
+				_danielnarey$elm_html_tree$HtmlTree$addAttribute,
+				{ctor: '_Tuple2', _0: 'value', _1: text},
+				_user$project$ViewTree$textareaLeaf)));
+	var header = A2(
+		_user$project$View$appendParent,
+		_user$project$ViewTree$cardHeaderTree,
+		_user$project$ViewTree$cardHeaderTitleLeaf('Your Novel'));
+	var footer = A2(
+		_user$project$View$appendParent,
+		_user$project$ViewTree$cardFooterTree,
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$appendChild,
+			_user$project$ViewTree$iconLeaf('play-circle'),
+			_user$project$ViewTree$cardFooterItemLeaf));
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$appendChild,
+		footer,
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$appendChild,
+			content,
+			A2(_danielnarey$elm_html_tree$HtmlTree$appendChild, header, _user$project$ViewTree$cardTree)));
+};
+var _user$project$View$novelCard = F2(
+	function (label, contentTree) {
+		var footer = A2(
+			_user$project$View$appendParent,
+			_user$project$ViewTree$cardFooterTree,
+			A2(
+				_danielnarey$elm_html_tree$HtmlTree$appendChild,
+				_user$project$ViewTree$iconLeaf('forward'),
+				_user$project$ViewTree$cardFooterItemLeaf));
+		var header = A2(
+			_user$project$View$appendParent,
+			_user$project$ViewTree$cardHeaderTree,
+			_user$project$ViewTree$cardHeaderTitleLeaf(label));
+		var content = A2(_user$project$View$appendParent, _user$project$ViewTree$cardContentTree, contentTree);
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree$appendChild,
+			footer,
+			A2(
+				_danielnarey$elm_html_tree$HtmlTree$appendChild,
+				content,
+				A2(_danielnarey$elm_html_tree$HtmlTree$appendChild, header, _user$project$ViewTree$cardTree)));
+	});
+var _user$project$Novel$branch = F2(
+	function (input, novel) {
+		var _p0 = novel;
+		if (_p0.ctor === 'Choice') {
+			return _p0._1(input);
+		} else {
+			return novel;
+		}
+	});
+var _user$project$Novel$feed = function (novel) {
+	feed:
+	while (true) {
+		var _p1 = novel;
+		switch (_p1.ctor) {
+			case 'Text':
+				var _v2 = _p1._1;
+				novel = _v2;
+				continue feed;
+			case 'Line':
+				var _v3 = _p1._2;
+				novel = _v3;
+				continue feed;
+			case 'At':
+				return _p1._0;
+			default:
+				return novel;
+		}
 	}
 };
+var _user$project$Novel$update = F2(
+	function (msg, model) {
+		var _p2 = msg;
+		switch (_p2.ctor) {
+			case 'Feed':
+				return _elm_lang$core$Native_Utils.update(
+					model,
+					{
+						rest: _user$project$Novel$feed(model.rest)
+					});
+			case 'Restart':
+				return _elm_lang$core$Native_Utils.update(
+					model,
+					{rest: model.novel});
+			default:
+				return _elm_lang$core$Native_Utils.update(
+					model,
+					{
+						rest: A2(_user$project$Novel$branch, _p2._0, model.rest)
+					});
+		}
+	});
+var _user$project$Novel$Model = F2(
+	function (a, b) {
+		return {novel: a, rest: b};
+	});
 var _user$project$Novel$Return = function (a) {
 	return {ctor: 'Return', _0: a};
 };
 var _user$project$Novel$return = _user$project$Novel$Return(
 	{ctor: '_Tuple0'});
+var _user$project$Novel$Choice = F2(
+	function (a, b) {
+		return {ctor: 'Choice', _0: a, _1: b};
+	});
+var _user$project$Novel$choice = function (choices) {
+	return A2(
+		_user$project$Novel$Choice,
+		choices,
+		_elm_lang$core$Basics$always(_user$project$Novel$return));
+};
 var _user$project$Novel$At = function (a) {
 	return {ctor: 'At', _0: a};
 };
@@ -10123,139 +12391,171 @@ var _user$project$Novel$line = F2(
 	});
 var _user$project$Novel$labeled = F2(
 	function (label, novel) {
-		var _p1 = novel;
-		switch (_p1.ctor) {
+		var _p3 = novel;
+		switch (_p3.ctor) {
 			case 'Text':
 				return A3(
 					_user$project$Novel$Line,
 					label,
-					_p1._0,
-					A2(_user$project$Novel$labeled, label, _p1._1));
-			case 'Line':
-				return A3(
-					_user$project$Novel$Line,
-					_p1._0,
-					_p1._1,
-					A2(_user$project$Novel$labeled, label, _p1._2));
+					_p3._0,
+					A2(_user$project$Novel$labeled, label, _p3._1));
 			case 'At':
 				return _user$project$Novel$At(
-					A2(_user$project$Novel$labeled, label, _p1._0));
+					A2(_user$project$Novel$labeled, label, _p3._0));
+			case 'Return':
+				return _user$project$Novel$Return(_p3._0);
 			default:
-				return _user$project$Novel$Return(_p1._0);
+				return _elm_lang$core$Native_Utils.crashCase(
+					'Novel',
+					{
+						start: {line: 86, column: 3},
+						end: {line: 97, column: 27}
+					},
+					_p3)('Crash!');
 		}
 	});
 var _user$project$Novel$Text = F2(
 	function (a, b) {
 		return {ctor: 'Text', _0: a, _1: b};
 	});
+var _user$project$Novel$init = function (novel) {
+	return {
+		novel: novel,
+		rest: A2(
+			_user$project$Novel$Text,
+			'Click Start',
+			_user$project$Novel$At(novel))
+	};
+};
 var _user$project$Novel$text = function (str) {
 	return A2(_user$project$Novel$Text, str, _user$project$Novel$return);
 };
-var _user$project$Novel$uncons = function (novel) {
-	var _p2 = novel;
-	switch (_p2.ctor) {
-		case 'Return':
-			return _elm_lang$core$Maybe$Nothing;
-		case 'Text':
-			return _elm_lang$core$Maybe$Just(
-				{
-					ctor: '_Tuple2',
-					_0: _user$project$Novel$text(_p2._0),
-					_1: _p2._1
-				});
-		case 'Line':
-			return _elm_lang$core$Maybe$Just(
-				{
-					ctor: '_Tuple2',
-					_0: A2(_user$project$Novel$line, _p2._0, _p2._1),
-					_1: _p2._2
-				});
-		default:
-			return _elm_lang$core$Maybe$Just(
-				{ctor: '_Tuple2', _0: _user$project$Novel$at, _1: _p2._0});
-	}
-};
 var _user$project$Novel$andThen = F2(
 	function (func, novel) {
-		var _p3 = novel;
-		switch (_p3.ctor) {
+		var _p5 = novel;
+		switch (_p5.ctor) {
 			case 'Text':
 				return A2(
 					_user$project$Novel$Text,
-					_p3._0,
-					A2(_user$project$Novel$andThen, func, _p3._1));
+					_p5._0,
+					A2(_user$project$Novel$andThen, func, _p5._1));
 			case 'Line':
 				return A3(
 					_user$project$Novel$Line,
-					_p3._0,
-					_p3._1,
-					A2(_user$project$Novel$andThen, func, _p3._2));
+					_p5._0,
+					_p5._1,
+					A2(_user$project$Novel$andThen, func, _p5._2));
 			case 'At':
 				return _user$project$Novel$At(
-					A2(_user$project$Novel$andThen, func, _p3._0));
+					A2(_user$project$Novel$andThen, func, _p5._0));
+			case 'Choice':
+				return A2(
+					_user$project$Novel$Choice,
+					_p5._0,
+					function ($char) {
+						return A2(
+							_user$project$Novel$andThen,
+							func,
+							_p5._1($char));
+					});
 			default:
-				return func(_p3._0);
+				return func(_p5._0);
 		}
 	});
 var _user$project$Novel$append = F2(
 	function (left, right) {
 		return A2(
 			_user$project$Novel$andThen,
-			function (_p4) {
+			function (_p6) {
 				return right;
 			},
 			left);
 	});
 var _user$project$Novel$andEnd = _elm_lang$core$Basics$flip(_user$project$Novel$append);
-var _user$project$Novel$untilAt = function (novel) {
-	var _p5 = novel;
-	switch (_p5.ctor) {
-		case 'Return':
-			return {
-				ctor: '_Tuple2',
-				_0: _user$project$Novel$return,
-				_1: _user$project$Novel$Return(_p5._0)
-			};
-		case 'Text':
-			var _p6 = _user$project$Novel$untilAt(_p5._1);
-			var head = _p6._0;
-			var rest_ = _p6._1;
-			return {
-				ctor: '_Tuple2',
-				_0: A2(
-					_user$project$Novel$andEnd,
-					head,
-					_user$project$Novel$text(_p5._0)),
-				_1: rest_
-			};
-		case 'Line':
-			var _p7 = _user$project$Novel$untilAt(_p5._2);
-			var head = _p7._0;
-			var rest_ = _p7._1;
-			return {
-				ctor: '_Tuple2',
-				_0: A2(
-					_user$project$Novel$andEnd,
-					head,
-					A2(_user$project$Novel$line, _p5._0, _p5._1)),
-				_1: rest_
-			};
-		default:
-			return {ctor: '_Tuple2', _0: _user$project$Novel$at, _1: _p5._0};
-	}
-};
 var _user$project$Novel$concat = A2(
 	_elm_lang$core$List$foldl,
 	F2(
 		function (right, left) {
 			return A2(
 				_user$project$Novel$andThen,
-				function (_p8) {
+				function (_p7) {
 					return right;
 				},
 				left);
 		}),
 	_user$project$Novel$return);
+var _user$project$Novel$Restart = {ctor: 'Restart'};
+var _user$project$Novel$Input = function (a) {
+	return {ctor: 'Input', _0: a};
+};
+var _user$project$Novel$Feed = {ctor: 'Feed'};
+var _user$project$Novel$VEnd = {ctor: 'VEnd'};
+var _user$project$Novel$VLine = F2(
+	function (a, b) {
+		return {ctor: 'VLine', _0: a, _1: b};
+	});
+var _user$project$Novel$VText = function (a) {
+	return {ctor: 'VText', _0: a};
+};
+var _user$project$Novel$view = function (novel) {
+	var _p8 = novel;
+	switch (_p8.ctor) {
+		case 'Return':
+			return {
+				ctor: '::',
+				_0: _user$project$Novel$VEnd,
+				_1: {ctor: '[]'}
+			};
+		case 'Text':
+			return {
+				ctor: '::',
+				_0: _user$project$Novel$VText(_p8._0),
+				_1: _user$project$Novel$view(_p8._1)
+			};
+		case 'Line':
+			return {
+				ctor: '::',
+				_0: A2(_user$project$Novel$VLine, _p8._0, _p8._1),
+				_1: _user$project$Novel$view(_p8._2)
+			};
+		case 'At':
+			return {ctor: '[]'};
+		default:
+			return A2(_elm_lang$core$List$map, _user$project$Novel$VText, _p8._0);
+	}
+};
+var _user$project$Novel$htmlTree = function (novel) {
+	var tagger = function (v) {
+		var _p9 = v;
+		switch (_p9.ctor) {
+			case 'VText':
+				return A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', _p9._0);
+			case 'VLine':
+				return A2(
+					_danielnarey$elm_html_tree$HtmlTree$textWrapper,
+					'p',
+					A2(
+						_elm_lang$core$Basics_ops['++'],
+						'[',
+						A2(
+							_elm_lang$core$Basics_ops['++'],
+							_p9._0,
+							A2(_elm_lang$core$Basics_ops['++'], ']', _p9._1))));
+			default:
+				return A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', 'End');
+		}
+	};
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		'content',
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$container,
+			'div',
+			A2(
+				_elm_lang$core$List$map,
+				tagger,
+				_user$project$Novel$view(novel))));
+};
 var _user$project$Novel_Parser$endOrEol = A2(
 	_Bogdanp$elm_combine$Combine$mapError,
 	function (_p0) {
@@ -10489,651 +12789,135 @@ var _user$project$Novel_Parser$parse_ = F2(
 		}
 	});
 var _user$project$Novel_Parser$parse = _user$project$Novel_Parser$parse_(_user$project$Novel_Parser$novel);
-var _user$project$Form$classList = function (list) {
-	return _elm_lang$html$Html_Attributes$classList(
-		A2(
-			_elm_lang$core$List$map,
-			A2(
-				_elm_lang$core$Basics$flip,
-				F2(
-					function (v0, v1) {
-						return {ctor: '_Tuple2', _0: v0, _1: v1};
-					}),
-				true),
-			list));
-};
-var _user$project$Form$header = A2(
-	_elm_lang$html$Html$section,
-	{
-		ctor: '::',
-		_0: _user$project$Form$classList(
-			{
-				ctor: '::',
-				_0: 'hero',
-				_1: {
-					ctor: '::',
-					_0: 'is-primary',
-					_1: {ctor: '[]'}
-				}
-			}),
-		_1: {ctor: '[]'}
-	},
-	{
-		ctor: '::',
-		_0: A2(
-			_elm_lang$html$Html$div,
-			{
-				ctor: '::',
-				_0: _user$project$Form$classList(
-					{
-						ctor: '::',
-						_0: 'hero-head',
-						_1: {ctor: '[]'}
-					}),
-				_1: {ctor: '[]'}
-			},
-			{
-				ctor: '::',
-				_0: A2(
-					_elm_lang$html$Html$nav,
-					{
-						ctor: '::',
-						_0: _user$project$Form$classList(
-							{
-								ctor: '::',
-								_0: 'nav',
-								_1: {
-									ctor: '::',
-									_0: 'has-shadow',
-									_1: {ctor: '[]'}
-								}
-							}),
-						_1: {ctor: '[]'}
-					},
-					{
-						ctor: '::',
-						_0: A2(
-							_elm_lang$html$Html$div,
-							{
-								ctor: '::',
-								_0: _elm_lang$html$Html_Attributes$class('nav-right'),
-								_1: {ctor: '[]'}
-							},
-							{
-								ctor: '::',
-								_0: A2(
-									_elm_lang$html$Html$a,
-									{
-										ctor: '::',
-										_0: _elm_lang$html$Html_Attributes$class('nav-item'),
-										_1: {
-											ctor: '::',
-											_0: _elm_lang$html$Html_Attributes$href('https://github.com/miyamoen/elm-novel-engine'),
-											_1: {ctor: '[]'}
-										}
-									},
-									{
-										ctor: '::',
-										_0: A2(
-											_elm_lang$html$Html$span,
-											{
-												ctor: '::',
-												_0: _elm_lang$html$Html_Attributes$class('icon'),
-												_1: {ctor: '[]'}
-											},
-											{
-												ctor: '::',
-												_0: A2(
-													_elm_lang$html$Html$i,
-													{
-														ctor: '::',
-														_0: _user$project$Form$classList(
-															{
-																ctor: '::',
-																_0: 'fa',
-																_1: {
-																	ctor: '::',
-																	_0: 'fa-github',
-																	_1: {ctor: '[]'}
-																}
-															}),
-														_1: {ctor: '[]'}
-													},
-													{ctor: '[]'}),
-												_1: {ctor: '[]'}
-											}),
-										_1: {ctor: '[]'}
-									}),
-								_1: {ctor: '[]'}
-							}),
-						_1: {ctor: '[]'}
-					}),
-				_1: {ctor: '[]'}
-			}),
-		_1: {
-			ctor: '::',
-			_0: A2(
-				_elm_lang$html$Html$div,
-				{
-					ctor: '::',
-					_0: _elm_lang$html$Html_Attributes$class('hero-body has-text-centered'),
-					_1: {ctor: '[]'}
-				},
-				{
-					ctor: '::',
-					_0: A2(
-						_elm_lang$html$Html$h1,
-						{
-							ctor: '::',
-							_0: _elm_lang$html$Html_Attributes$class('title'),
-							_1: {ctor: '[]'}
-						},
-						{
-							ctor: '::',
-							_0: _elm_lang$html$Html$text('Novel Engine'),
-							_1: {ctor: '[]'}
-						}),
-					_1: {ctor: '[]'}
-				}),
-			_1: {ctor: '[]'}
-		}
-	});
-var _user$project$Form$messageView = function (_p0) {
-	var _p1 = _p0;
-	return A2(
-		_elm_lang$html$Html$div,
-		{
-			ctor: '::',
-			_0: _user$project$Form$classList(
-				{
-					ctor: '::',
-					_0: 'box',
-					_1: {
-						ctor: '::',
-						_0: 'container',
-						_1: {ctor: '[]'}
-					}
-				}),
-			_1: {ctor: '[]'}
-		},
-		{
-			ctor: '::',
-			_0: A2(
-				_elm_lang$html$Html$article,
-				{
-					ctor: '::',
-					_0: _user$project$Form$classList(
-						{
-							ctor: '::',
-							_0: 'notification',
-							_1: {
-								ctor: '::',
-								_0: 'is-info',
-								_1: {ctor: '[]'}
-							}
-						}),
-					_1: {ctor: '[]'}
-				},
-				{
-					ctor: '::',
-					_0: A2(
-						_elm_lang$html$Html$p,
-						{ctor: '[]'},
-						{
-							ctor: '::',
-							_0: _elm_lang$html$Html$text(_p1.error),
-							_1: {ctor: '[]'}
-						}),
-					_1: {ctor: '[]'}
-				}),
-			_1: {ctor: '[]'}
-		});
-};
-var _user$project$Form$stylesheet = function (url) {
-	return A3(
-		_elm_lang$html$Html$node,
-		'link',
-		{
-			ctor: '::',
-			_0: _elm_lang$html$Html_Attributes$rel('stylesheet'),
-			_1: {
-				ctor: '::',
-				_0: _elm_lang$html$Html_Attributes$type_('text/css'),
-				_1: {
-					ctor: '::',
-					_0: _elm_lang$html$Html_Attributes$href(url),
-					_1: {ctor: '[]'}
-				}
-			}
-		},
-		{ctor: '[]'});
-};
-var _user$project$Form$bulma = _user$project$Form$stylesheet('https://cdnjs.cloudflare.com/ajax/libs/bulma/0.3.0/css/bulma.min.css');
-var _user$project$Form$fontAwesome = _user$project$Form$stylesheet('https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css');
 var _user$project$Form$subscriptions = function (model) {
 	return _elm_lang$core$Platform_Sub$none;
 };
 var _user$project$Form$update = F2(
 	function (msg, model) {
-		var _p2 = msg;
-		switch (_p2.ctor) {
+		var _p0 = msg;
+		switch (_p0.ctor) {
+			case 'NovelMsg':
+				return _etaque$elm_response$Response$withNone(
+					_elm_lang$core$Native_Utils.update(
+						model,
+						{
+							novel: A2(_user$project$Novel$update, _p0._0, model.novel)
+						}));
 			case 'Input':
 				return _etaque$elm_response$Response$withNone(
 					_elm_lang$core$Native_Utils.update(
 						model,
-						{input: _p2._0}));
-			case 'Run':
-				var _p3 = _user$project$Novel_Parser$parse(model.input);
-				if (_p3.ctor === 'Ok') {
+						{script: _p0._0}));
+			default:
+				var _p1 = _user$project$Novel_Parser$parse(model.script);
+				if (_p1.ctor === 'Ok') {
 					return _etaque$elm_response$Response$withNone(
 						_elm_lang$core$Native_Utils.update(
 							model,
 							{
-								novel: A2(_elm_lang$core$Debug$log, 'novelの中身', _p3._0),
-								screen: 'Click Start!▼'
+								novel: _user$project$Novel$init(
+									A2(_elm_lang$core$Debug$log, 'novelの中身', _p1._0))
 							}));
 				} else {
 					return _etaque$elm_response$Response$withNone(
 						_elm_lang$core$Native_Utils.update(
 							model,
-							{error: _p3._0}));
+							{error: _p1._0}));
 				}
-			default:
-				var _p4 = _user$project$Novel$untilAt(model.novel);
-				var head = _p4._0;
-				var rest = _p4._1;
-				return _etaque$elm_response$Response$withNone(
-					_elm_lang$core$Native_Utils.update(
-						model,
-						{
-							screen: _elm_lang$core$Native_Utils.eq(head, _user$project$Novel$return) ? 'End' : _user$project$Novel$toString(head),
-							novel: rest
-						}));
 		}
 	});
-var _user$project$Form$defaultModel = {novel: _user$project$Novel$return, screen: '', input: '', error: ''};
-var _user$project$Form$init = _etaque$elm_response$Response$withNone(_user$project$Form$defaultModel);
-var _user$project$Form$Model = F4(
-	function (a, b, c, d) {
-		return {novel: a, screen: b, input: c, error: d};
-	});
-var _user$project$Form$Feed = {ctor: 'Feed'};
-var _user$project$Form$novelView = function (_p5) {
-	var _p6 = _p5;
-	return A2(
-		_elm_lang$html$Html$div,
-		{
-			ctor: '::',
-			_0: _user$project$Form$classList(
-				{
-					ctor: '::',
-					_0: 'box',
-					_1: {
-						ctor: '::',
-						_0: 'container',
-						_1: {
-							ctor: '::',
-							_0: 'tile',
-							_1: {
-								ctor: '::',
-								_0: 'is-parent',
-								_1: {
-									ctor: '::',
-									_0: 'is-5',
-									_1: {ctor: '[]'}
-								}
-							}
-						}
-					}
-				}),
-			_1: {ctor: '[]'}
-		},
-		{
-			ctor: '::',
-			_0: A2(
-				_elm_lang$html$Html$pre,
-				{
-					ctor: '::',
-					_0: _user$project$Form$classList(
-						{
-							ctor: '::',
-							_0: 'tile',
-							_1: {
-								ctor: '::',
-								_0: 'is-child',
-								_1: {ctor: '[]'}
-							}
-						}),
-					_1: {
-						ctor: '::',
-						_0: _elm_lang$html$Html_Events$onClick(_user$project$Form$Feed),
-						_1: {ctor: '[]'}
-					}
-				},
-				{
-					ctor: '::',
-					_0: _elm_lang$html$Html$text(_p6.screen),
-					_1: {ctor: '[]'}
-				}),
-			_1: {ctor: '[]'}
-		});
+var _user$project$Form$defaultModel = {
+	novel: _user$project$Novel$init(_user$project$Novel$return),
+	script: '',
+	error: ''
 };
-var _user$project$Form$Run = {ctor: 'Run'};
-var _user$project$Form$controlView = A2(
-	_elm_lang$html$Html$div,
-	{
-		ctor: '::',
-		_0: _user$project$Form$classList(
-			{
-				ctor: '::',
-				_0: 'tile',
-				_1: {
-					ctor: '::',
-					_0: 'is-parent',
-					_1: {ctor: '[]'}
-				}
-			}),
-		_1: {ctor: '[]'}
-	},
-	{
-		ctor: '::',
-		_0: A2(
-			_elm_lang$html$Html$p,
-			{
-				ctor: '::',
-				_0: _user$project$Form$classList(
-					{
-						ctor: '::',
-						_0: 'control',
-						_1: {
-							ctor: '::',
-							_0: 'tile',
-							_1: {
-								ctor: '::',
-								_0: 'is-child',
-								_1: {ctor: '[]'}
-							}
-						}
-					}),
-				_1: {ctor: '[]'}
-			},
-			{
-				ctor: '::',
-				_0: A2(
-					_elm_lang$html$Html$a,
-					{
-						ctor: '::',
-						_0: _elm_lang$html$Html_Events$onClick(_user$project$Form$Run),
-						_1: {
-							ctor: '::',
-							_0: _user$project$Form$classList(
-								{
-									ctor: '::',
-									_0: 'button',
-									_1: {
-										ctor: '::',
-										_0: 'is-primary',
-										_1: {
-											ctor: '::',
-											_0: 'is-outlined',
-											_1: {
-												ctor: '::',
-												_0: 'is-large',
-												_1: {ctor: '[]'}
-											}
-										}
-									}
-								}),
-							_1: {ctor: '[]'}
-						}
-					},
-					{
-						ctor: '::',
-						_0: A2(
-							_elm_lang$html$Html$span,
-							{
-								ctor: '::',
-								_0: _elm_lang$html$Html_Attributes$class('icon'),
-								_1: {ctor: '[]'}
-							},
-							{
-								ctor: '::',
-								_0: A2(
-									_elm_lang$html$Html$i,
-									{
-										ctor: '::',
-										_0: _user$project$Form$classList(
-											{
-												ctor: '::',
-												_0: 'fa',
-												_1: {
-													ctor: '::',
-													_0: 'fa-play-circle',
-													_1: {ctor: '[]'}
-												}
-											}),
-										_1: {ctor: '[]'}
-									},
-									{ctor: '[]'}),
-								_1: {ctor: '[]'}
-							}),
-						_1: {
-							ctor: '::',
-							_0: A2(
-								_elm_lang$html$Html$span,
-								{ctor: '[]'},
-								{
-									ctor: '::',
-									_0: _elm_lang$html$Html$text('Run'),
-									_1: {ctor: '[]'}
-								}),
-							_1: {ctor: '[]'}
-						}
-					}),
-				_1: {ctor: '[]'}
-			}),
-		_1: {ctor: '[]'}
+var _user$project$Form$init = _etaque$elm_response$Response$withNone(_user$project$Form$defaultModel);
+var _user$project$Form$Model = F3(
+	function (a, b, c) {
+		return {novel: a, script: b, error: c};
 	});
 var _user$project$Form$Input = function (a) {
 	return {ctor: 'Input', _0: a};
 };
-var _user$project$Form$inputForm = function (_p7) {
-	var _p8 = _p7;
-	return A2(
-		_elm_lang$html$Html$div,
-		{
-			ctor: '::',
-			_0: _user$project$Form$classList(
-				{
-					ctor: '::',
-					_0: 'tile',
-					_1: {
-						ctor: '::',
-						_0: 'is-parent',
-						_1: {
-							ctor: '::',
-							_0: 'is-vertical',
-							_1: {
-								ctor: '::',
-								_0: 'container',
-								_1: {
-									ctor: '::',
-									_0: 'is-fluid',
-									_1: {ctor: '[]'}
-								}
-							}
-						}
-					}
-				}),
-			_1: {ctor: '[]'}
-		},
-		{
-			ctor: '::',
-			_0: A2(
-				_elm_lang$html$Html$label,
-				{
-					ctor: '::',
-					_0: _user$project$Form$classList(
-						{
-							ctor: '::',
-							_0: 'label',
-							_1: {
-								ctor: '::',
-								_0: 'tile',
-								_1: {
-									ctor: '::',
-									_0: 'is-child',
-									_1: {ctor: '[]'}
-								}
-							}
-						}),
-					_1: {ctor: '[]'}
-				},
-				{
-					ctor: '::',
-					_0: _elm_lang$html$Html$text('Your Novel'),
-					_1: {ctor: '[]'}
-				}),
-			_1: {
-				ctor: '::',
-				_0: A2(
-					_elm_lang$html$Html$p,
-					{
-						ctor: '::',
-						_0: _user$project$Form$classList(
-							{
-								ctor: '::',
-								_0: 'control',
-								_1: {
-									ctor: '::',
-									_0: 'tile',
-									_1: {
-										ctor: '::',
-										_0: 'is-child',
-										_1: {ctor: '[]'}
-									}
-								}
-							}),
-						_1: {ctor: '[]'}
-					},
-					{
-						ctor: '::',
-						_0: A2(
-							_elm_lang$html$Html$textarea,
-							{
-								ctor: '::',
-								_0: _user$project$Form$classList(
-									{
-										ctor: '::',
-										_0: 'textarea',
-										_1: {
-											ctor: '::',
-											_0: 'is-large',
-											_1: {
-												ctor: '::',
-												_0: 'is-primary',
-												_1: {ctor: '[]'}
-											}
-										}
-									}),
-								_1: {
-									ctor: '::',
-									_0: _elm_lang$html$Html_Attributes$placeholder('Input Your Novel!'),
-									_1: {
-										ctor: '::',
-										_0: _elm_lang$html$Html_Attributes$value(_p8.input),
-										_1: {
-											ctor: '::',
-											_0: _elm_lang$html$Html_Events$onInput(_user$project$Form$Input),
-											_1: {ctor: '[]'}
-										}
-									}
-								}
-							},
-							{ctor: '[]'}),
-						_1: {ctor: '[]'}
-					}),
-				_1: {ctor: '[]'}
-			}
-		});
+var _user$project$Form$Parse = {ctor: 'Parse'};
+var _user$project$Form$novelInputCard = function (text) {
+	return A3(
+		_danielnarey$elm_html_tree$HtmlTree_Modify$matchingTag,
+		'a',
+		_danielnarey$elm_html_tree$HtmlTree$addAction(
+			{ctor: '_Tuple2', _0: 'click', _1: _user$project$Form$Parse}),
+		A3(
+			_danielnarey$elm_html_tree$HtmlTree_Modify$matchingTag,
+			'textarea',
+			_danielnarey$elm_html_tree$HtmlTree$withObserver(
+				_elm_lang$html$Html_Events$onInput(_user$project$Form$Input)),
+			_user$project$View$novelInputCard(text)));
 };
+var _user$project$Form$NovelMsg = function (a) {
+	return {ctor: 'NovelMsg', _0: a};
+};
+var _user$project$Form$novelCard = F2(
+	function (label, novel) {
+		return A2(
+			_danielnarey$elm_html_tree$HtmlTree$addAction,
+			{
+				ctor: '_Tuple2',
+				_0: 'click',
+				_1: _user$project$Form$NovelMsg(_user$project$Novel$Feed)
+			},
+			A2(
+				_user$project$View$novelCard,
+				'Novel',
+				_user$project$Novel$htmlTree(novel)));
+	});
 var _user$project$Form$view = function (model) {
-	return A2(
-		_elm_lang$html$Html$div,
-		{ctor: '[]'},
-		{
-			ctor: '::',
-			_0: _user$project$Form$bulma,
-			_1: {
-				ctor: '::',
-				_0: _user$project$Form$fontAwesome,
-				_1: {
-					ctor: '::',
-					_0: _user$project$Form$header,
-					_1: {
-						ctor: '::',
-						_0: _user$project$Form$messageView(model),
-						_1: {
-							ctor: '::',
-							_0: A2(
-								_elm_lang$html$Html$div,
-								{
-									ctor: '::',
-									_0: _user$project$Form$classList(
-										{
-											ctor: '::',
-											_0: 'tile',
-											_1: {
-												ctor: '::',
-												_0: 'is-ancestor',
-												_1: {ctor: '[]'}
-											}
-										}),
-									_1: {ctor: '[]'}
-								},
-								{
-									ctor: '::',
-									_0: _user$project$Form$novelView(model),
-									_1: {
-										ctor: '::',
-										_0: A2(
-											_elm_lang$html$Html$div,
-											{
-												ctor: '::',
-												_0: _user$project$Form$classList(
-													{
-														ctor: '::',
-														_0: 'tile',
-														_1: {
-															ctor: '::',
-															_0: 'is-6',
-															_1: {
-																ctor: '::',
-																_0: 'is-vertical',
-																_1: {ctor: '[]'}
-															}
-														}
-													}),
-												_1: {ctor: '[]'}
-											},
-											{
-												ctor: '::',
-												_0: _user$project$Form$controlView,
-												_1: {
-													ctor: '::',
-													_0: _user$project$Form$inputForm(model),
-													_1: {ctor: '[]'}
-												}
-											}),
-										_1: {ctor: '[]'}
-									}
-								}),
-							_1: {ctor: '[]'}
-						}
-					}
-				}
-			}
-		});
+	var novelTile = A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		_danielnarey$elm_bulma_classes$BulmaClasses$tile.width.is6,
+		A2(
+			_user$project$View$appendParent,
+			_user$project$ViewTree$tileParentTree,
+			A2(
+				_user$project$View$appendParent,
+				_user$project$ViewTree$tileChildTree,
+				A2(
+					_danielnarey$elm_html_tree$HtmlTree$addClass,
+					_danielnarey$elm_bulma_classes$BulmaClasses$feature.sizing.isFluid,
+					A2(
+						_user$project$View$appendParent,
+						_user$project$ViewTree$featureTree,
+						A2(_user$project$Form$novelCard, 'Novel', model.novel.rest))))));
+	var inputTile = A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		_danielnarey$elm_bulma_classes$BulmaClasses$tile.width.is6,
+		A2(
+			_user$project$View$appendParent,
+			_user$project$ViewTree$tileParentTree,
+			A2(
+				_user$project$View$appendParent,
+				_user$project$ViewTree$tileChildTree,
+				A2(
+					_danielnarey$elm_html_tree$HtmlTree$addClass,
+					_danielnarey$elm_bulma_classes$BulmaClasses$feature.sizing.isFluid,
+					A2(
+						_user$project$View$appendParent,
+						_user$project$ViewTree$featureTree,
+						_user$project$Form$novelInputCard(model.script))))));
+	return _danielnarey$elm_html_tree$HtmlTree$assembleHtml(
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$prependChild,
+			_user$project$View$cdnTree,
+			A2(
+				_danielnarey$elm_html_tree$HtmlTree$prependChild,
+				_user$project$View$heroHeader,
+				A2(
+					_danielnarey$elm_html_tree$HtmlTree$container,
+					'div',
+					_elm_lang$core$List$singleton(
+						A2(
+							_danielnarey$elm_html_tree$HtmlTree$appendChild,
+							novelTile,
+							A2(_danielnarey$elm_html_tree$HtmlTree$appendChild, inputTile, _user$project$ViewTree$tileAncestorTree)))))));
 };
 var _user$project$Form$main = _elm_lang$html$Html$program(
 	{init: _user$project$Form$init, view: _user$project$Form$view, update: _user$project$Form$update, subscriptions: _user$project$Form$subscriptions})();

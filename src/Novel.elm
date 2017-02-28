@@ -1,15 +1,74 @@
 module Novel exposing (..)
 
+import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild)
 
 type alias Label = String
-
 
 
 type Novel a
   = Text String (Novel a)
   | Line Label String (Novel a)
   | At (Novel a)
+  | Choice (List String) (Char -> Novel a)
   | Return a
+
+
+type Msg
+  = Feed
+  | Input Char
+  | Restart
+
+
+type alias Model a =
+  { novel : Novel a
+  , rest : Novel a
+  }
+
+
+init : Novel () -> Model ()
+init novel =
+  { novel = novel
+  , rest = Text "Click Start" (At novel)
+  }
+
+
+update : Msg -> Model a -> Model a
+update msg model =
+  case msg of
+    Feed ->
+      { model | rest = feed  model.rest }
+
+    Restart ->
+      { model | rest = model.novel }
+
+    Input char ->
+      { model | rest = branch char model.rest }
+
+
+feed : Novel a -> Novel a
+feed novel =
+  case novel of
+    Text _ rest ->
+      feed rest
+
+    Line _ _ rest ->
+      feed rest
+
+    At rest ->
+      rest
+
+    _ ->
+      novel
+
+
+branch : Char -> Novel a -> Novel a
+branch input novel =
+  case novel of
+    Choice _ restF ->
+      restF input
+
+    _ ->
+      novel
 
 
 text : String -> Novel ()
@@ -22,14 +81,11 @@ line label str =
   Line label str return
 
 
-labeled : Label -> Novel a -> Novel a
+labeled : Label -> Novel () -> Novel ()
 labeled label novel =
   case novel of
     Text str rest ->
       Line label str <| labeled label rest
-
-    Line label_ str rest ->
-      Line label_ str <| labeled label rest
 
     At rest ->
       At <| labeled label rest
@@ -37,10 +93,18 @@ labeled label novel =
     Return a ->
       Return a
 
+    _ ->
+      Debug.crash "Crash!"
+
 
 at : Novel ()
 at =
   At return
+
+
+choice : List String -> Novel ()
+choice choices =
+  Choice choices <| always return
 
 
 return : Novel ()
@@ -60,6 +124,9 @@ andThen func novel =
     At next ->
       At <| andThen func next
 
+    Choice choices junction ->
+      Choice choices <| (\char -> junction char |> andThen func)
+
     Return val ->
       func val
 
@@ -74,61 +141,59 @@ andEnd =
   flip append
 
 
-uncons : Novel a -> Maybe (Novel (), Novel a)
-uncons novel =
-  case novel of
-    Return a ->
-      Nothing
-
-    Text str rest ->
-      Just (text str, rest)
-
-    Line label str rest ->
-      Just (line label str, rest)
-
-    At rest ->
-      Just (at, rest)
-
-
 concat : List (Novel ()) -> Novel ()
 concat =
   -- List.Extra.foldl1 append
   List.foldl (\right left -> andThen (\_ -> right) left) return
 
 
-untilAt : Novel a -> (Novel (), Novel a)
-untilAt novel =
+type View
+  = VText String
+  | VLine Label String
+  | VEnd
+
+
+view : Novel a -> List View
+view novel =
   case novel of
     Return a ->
-      (return, Return a)
+      [ VEnd ]
 
     Text str rest ->
-      let
-        (head, rest_) = untilAt rest
-      in
-        (text str |> andEnd head, rest_)
+      VText str :: view rest
 
     Line label str rest ->
-      let
-        (head, rest_) = untilAt rest
-      in
-        (line label str |> andEnd head, rest_)
+      VLine label str :: view rest
 
     At rest ->
-      (at, rest)
+      []
+
+    Choice choices junction ->
+      List.map VText choices
 
 
-toString : Novel a -> String
-toString novel =
-  case novel of
-    Return a ->
-      ""
+htmlTree : Novel a -> HtmlTree msg
+htmlTree novel =
+  let
+    tagger v =
+      case v of
+        VText str ->
+          textWrapper "p" str
 
-    Text str rest ->
-      str ++ "\n" ++ toString rest
+        VLine label str ->
+          textWrapper "p" ("[" ++ label ++ "]" ++ str)
 
-    Line label str rest ->
-      "[ " ++ label ++ " ] : " ++ str ++ "\n" ++ toString rest
+        VEnd ->
+          textWrapper "p" "End"
+  in
+    view novel
+      |> List.map tagger
+      |> container "div"
+      |> addClass "content"
 
-    At rest ->
-      "▼"
+
+-- sample : Novel ()
+-- sample =
+--   text "1行目"
+--     |> append (line "わたし" "ばかめ")
+--     |> append (Choice [ "1c", "2c", "3c" ])

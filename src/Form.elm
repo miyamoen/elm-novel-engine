@@ -35,7 +35,7 @@ type alias Model =
 defaultModel : Model
 defaultModel =
   { novel = Novel.init Novel.return
-  , script = ""
+  , script = sample
   , error = ""
   }
 
@@ -93,9 +93,6 @@ novelCard label novel =
     |> addAction ("click", NovelMsg Novel.Feed)
 
 
-
-
-
 view : Model -> Html Msg
 view model =
   let
@@ -123,3 +120,23 @@ view model =
       |> prependChild heroHeader
       |> prependChild cdnTree
       |> assembleHtml
+
+
+sample : String
+sample =
+  """文章が表示されます
+続けて表示されます
+
+空白行は無視されます
+
+あっとまーくでクリック待ちします＠
+
+あっと＠まーくで＠クリック待ち＠
+
+＠キャラ1　セリフです＠
+＠キャラ２　キャラ名の表示も雑です＠
+
+現在実装されているのはこれくらいです
+＠
+
+おわり"""

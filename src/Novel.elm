@@ -1,5 +1,6 @@
 module Novel exposing (..)
 
+import Dict exposing (Dict)
 import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild)
 
 type alias Label = String
@@ -11,6 +12,7 @@ type Novel a
   | At (Novel a)
   | Choice (List String) (Char -> Novel a)
   | Return a
+  | Moduled (Dict String (Novel a)) (Novel a)
 
 
 type Msg
@@ -112,7 +114,7 @@ return =
   Return ()
 
 
-andThen : (a -> Novel b) -> Novel a -> Novel b
+andThen : (a -> Novel a) -> Novel a -> Novel a
 andThen func novel =
   case novel of
     Text text next ->
@@ -130,13 +132,17 @@ andThen func novel =
     Return val ->
       func val
 
+    Moduled novels main ->
+      andThen func main
+        |> Moduled novels
 
-append : Novel a -> Novel b -> Novel b
+
+append : Novel a -> Novel a -> Novel a
 append left right =
   andThen (\_ -> right) left
 
 
-andEnd : Novel b -> Novel a -> Novel b
+andEnd : Novel a -> Novel a -> Novel a
 andEnd =
   flip append
 
@@ -170,6 +176,9 @@ view novel =
 
     Choice choices junction ->
       List.map VText choices
+
+    Moduled _ main ->
+      view main
 
 
 htmlTree : Novel a -> HtmlTree msg

@@ -10,8 +10,9 @@ import BulmaClasses exposing (..)
 
 import View exposing (..)
 import ViewTree exposing (..)
-import Novel exposing (Novel)
-import Novel.Parser as Parser
+import Novel exposing (Novel, InnerNovel)
+-- import Novel.Parser as Parser
+import Novel.Parser_ as Parser
 
 main : Program Never Model Msg
 main =
@@ -23,10 +24,8 @@ main =
     }
 
 
-
-
 type alias Model =
-  { novel : Novel.Model ()
+  { novel : Novel.Novel ()
   , script : String
   , error : String
   }
@@ -65,11 +64,11 @@ update msg model =
     Parse ->
       case Parser.parse model.script of
         Ok novel ->
-          { model | novel = Novel.init (Debug.log "novelの中身" novel) }
+          { model | novel = (Debug.log "novelの中身" novel) }
             |> withNone
 
         Err error ->
-          { model | error = error }
+          { model | error = Debug.log "error : " error }
             |> withNone
 
 
@@ -89,7 +88,7 @@ novelInputCard text =
 
 novelCard : String -> Novel a -> HtmlTree Msg
 novelCard label novel =
-  View.novelCard "Novel" (Novel.htmlTree novel)
+  View.novelCard "Novel" (novel.rest |> Novel.htmlTree)
     |> addAction ("click", NovelMsg Novel.Feed)
 
 
@@ -105,7 +104,7 @@ view model =
         |> addClass tile.width.is6
 
     novelTile =
-      novelCard "Novel" model.novel.rest
+      novelCard "Novel" model.novel
         |> appendParent featureTree
         |> addClass feature.sizing.isFluid
         |> appendParent tileChildTree
@@ -134,9 +133,28 @@ sample =
 あっと＠まーくで＠クリック待ち＠
 
 ＠キャラ1　セリフです＠
-＠キャラ２　キャラ名の表示も雑です＠
+＠キャラ２　キャラ名の表示も雑です＠これもキャラセリフ＠
 
 現在実装されているのはこれくらいです
 ＠
 
-おわり"""
+おわり
+下のボタンを押してください
+
+
+｛＠1章
+
+スクリプトをまとめて名前付けすることもできます
+
+＠いけぼ　おれの嫁になってくれ＠
+＠ひろいん　ええええ＠
+
+｝
+
+｛＠2章
+
+＠いけぼ　く、右ひざの古傷がうずく！＠
+＠ひろいん　低気圧だものね
+
+｝
+"""

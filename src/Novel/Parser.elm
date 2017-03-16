@@ -25,8 +25,8 @@ parse =
   parse_ novel
 
 
-andEnd : Parser () (Novel ()) -> Parser () (Novel ()) -> Parser () (Novel ())
-andEnd right left =
+andAppend : Parser () (Novel ()) -> Parser () (Novel ()) -> Parser () (Novel ())
+andAppend right left =
   left
     |> Combine.map Novel.append
     |> Combine.andMap right
@@ -73,7 +73,7 @@ text1 : Parser () (Novel ())
 text1 =
   string
     |> Combine.map Novel.text
-    |> andEnd at
+    |> andAppend at
     |> andIgnore (lookAhead endOrEol)
 
 
@@ -81,8 +81,8 @@ text2 : Parser () (Novel ())
 text2 =
   string
     |> Combine.map Novel.text
-    |> andEnd at
-    |> andEnd (lazy (\_ -> text))
+    |> andAppend at
+    |> andAppend (lazy (\_ -> text))
 
 
 line : Parser () (Novel ())
@@ -116,7 +116,7 @@ string =
         |> lookAhead
 
     char =
-      noneOf [ '@', '＠', '\n', '\r' ]
+      noneOf [ '@', '＠', '\n', '\r', '{', '}', '｛', '｝' ]
   in
     char
       |> Combine.map (::)

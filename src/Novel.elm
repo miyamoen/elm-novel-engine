@@ -2,17 +2,17 @@ module Novel exposing (..)
 
 import Dict exposing (Dict)
 import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild)
+import View exposing (appendParent)
 
 type alias Label = String
 
 
-type Novel a
-  = Text String (Novel a)
-  | Line Label String (Novel a)
-  | At (Novel a)
-  | Choice (List String) (Char -> Novel a)
+type InnerNovel a
+  = Text String (InnerNovel a)
+  | Line Label String (InnerNovel a)
+  | At (InnerNovel a)
+  | Choice (List String) (Char -> InnerNovel a)
   | Return a
-  | Moduled (Dict String (Novel a)) (Novel a)
 
 
 type Msg
@@ -21,33 +21,35 @@ type Msg
   | Restart
 
 
-type alias Model a =
-  { novel : Novel a
-  , rest : Novel a
+type alias Novel a =
+  { main : Maybe (InnerNovel a)
+  , rest : Maybe (InnerNovel a)
+  , sections : Dict String (InnerNovel a)
   }
 
 
-init : Novel () -> Model ()
+init : InnerNovel a -> Novel a
 init novel =
-  { novel = novel
-  , rest = Text "Click Start" (At novel)
+  { main = Just novel
+  , rest = Just novel
+  , sections = Dict.empty
   }
 
 
-update : Msg -> Model a -> Model a
+update : Msg -> Novel a -> Novel a
 update msg model =
   case msg of
     Feed ->
-      { model | rest = feed  model.rest }
+      { model | rest = model.rest |> Maybe.map feed }
 
     Restart ->
-      { model | rest = model.novel }
+      { model | rest = model.main }
 
     Input char ->
-      { model | rest = branch char model.rest }
+      { model | rest = model.rest |> Maybe.map (branch char) }
 
 
-feed : Novel a -> Novel a
+feed : InnerNovel a -> InnerNovel a
 feed novel =
   case novel of
     Text _ rest ->
@@ -63,7 +65,7 @@ feed novel =
       novel
 
 
-branch : Char -> Novel a -> Novel a
+branch : Char -> InnerNovel a -> InnerNovel a
 branch input novel =
   case novel of
     Choice _ restF ->
@@ -73,19 +75,37 @@ branch input novel =
       novel
 
 
-text : String -> Novel ()
+novelFromList : List (String, InnerNovel a) -> Novel a
+novelFromList novels =
+  let
+    main =
+      List.filter (Tuple.first >> (==) "main") novels
+        |> List.map Tuple.second
+        |> concat
+
+    sections =
+      List.filter (Tuple.first >> (/=) "main") novels
+        |> Dict.fromList
+  in
+    { main = main
+    , rest = main
+    , sections = sections
+    }
+
+
+text : String -> InnerNovel ()
 text str =
   Text str return
 
 
-line : Label -> String -> Novel ()
+line : Label -> String -> InnerNovel ()
 line label str =
   Line label str return
 
 
-labeled : Label -> Novel () -> Novel ()
+labeled : Label -> InnerNovel a -> InnerNovel a
 labeled label novel =
-  case novel of
+  case (Debug.log "daypo" novel) of
     Text str rest ->
       Line label str <| labeled label rest
 
@@ -96,25 +116,25 @@ labeled label novel =
       Return a
 
     _ ->
-      Debug.crash "Crash!"
+      novel
 
 
-at : Novel ()
+at : InnerNovel ()
 at =
   At return
 
 
-choice : List String -> Novel ()
+choice : List String -> InnerNovel ()
 choice choices =
   Choice choices <| always return
 
 
-return : Novel ()
+return : InnerNovel ()
 return =
   Return ()
 
 
-andThen : (a -> Novel a) -> Novel a -> Novel a
+andThen : (a -> InnerNovel b) -> InnerNovel a -> InnerNovel b
 andThen func novel =
   case novel of
     Text text next ->
@@ -129,28 +149,29 @@ andThen func novel =
     Choice choices junction ->
       Choice choices <| (\char -> junction char |> andThen func)
 
-    Return val ->
-      func val
-
-    Moduled novels main ->
-      andThen func main
-        |> Moduled novels
+    Return a ->
+      func a
 
 
-append : Novel a -> Novel a -> Novel a
+append : InnerNovel a -> InnerNovel a -> InnerNovel a
 append left right =
   andThen (\_ -> right) left
 
 
-andEnd : Novel a -> Novel a -> Novel a
-andEnd =
+andAppend : InnerNovel a -> InnerNovel a -> InnerNovel a
+andAppend =
   flip append
 
 
-concat : List (Novel ()) -> Novel ()
-concat =
-  -- List.Extra.foldl1 append
-  List.foldl (\right left -> andThen (\_ -> right) left) return
+concat : List (InnerNovel a) -> Maybe (InnerNovel a)
+concat novels =
+  case novels of
+    [] ->
+      Nothing
+
+    head :: rest ->
+      List.foldl (\right left -> andThen (\_ -> right) left) head rest
+        |> Just
 
 
 type View
@@ -159,7 +180,7 @@ type View
   | VEnd
 
 
-view : Novel a -> List View
+view : InnerNovel a -> List View
 view novel =
   case novel of
     Return a ->
@@ -177,12 +198,10 @@ view novel =
     Choice choices junction ->
       List.map VText choices
 
-    Moduled _ main ->
-      view main
 
 
-htmlTree : Novel a -> HtmlTree msg
-htmlTree novel =
+htmlTree : Maybe (InnerNovel a) -> HtmlTree msg
+htmlTree maybeNovel =
   let
     tagger v =
       case v of
@@ -195,14 +214,15 @@ htmlTree novel =
         VEnd ->
           textWrapper "p" "End"
   in
-    view novel
-      |> List.map tagger
-      |> container "div"
-      |> addClass "content"
+    case maybeNovel of
+      Just novel ->
+        view novel
+          |> List.map tagger
+          |> container "div"
+          |> addClass "content"
 
+      Nothing ->
+        textWrapper "p" "Nothing"
+          |> appendParent (leaf "div")
+          |> addClass "content"
 
--- sample : Novel ()
--- sample =
---   text "1行目"
---     |> append (line "わたし" "ばかめ")
---     |> append (Choice [ "1c", "2c", "3c" ])

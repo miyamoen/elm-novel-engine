@@ -11,8 +11,8 @@ import BulmaClasses exposing (..)
 import View exposing (..)
 import ViewTree exposing (..)
 import Novel exposing (Novel, InnerNovel)
--- import Novel.Parser as Parser
-import Novel.Parser_ as Parser
+import Novel.Parser as Parser
+
 
 main : Program Never Model Msg
 main =

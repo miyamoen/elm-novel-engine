@@ -1,146 +1,169 @@
 module Novel.Parser exposing (..)
 
-
-import Novel exposing (Novel(..))
-
-
-import Combine exposing (Parser, many1, many, manyTill, while, sepEndBy1, lazy, lookAhead, ($>), (*>), (<*), (<|>))
-import Combine.Char exposing (anyChar, char, noneOf, oneOf)
-
-type alias Label = String
-
-
-parse_ : Parser () (Novel a) -> String -> Result String (Novel a)
-parse_ p input =
-  case Combine.parse p input of
-    Ok (state, stream, novel) ->
-      Ok novel
-
-    Err (state, stream, errors) ->
-      Err (String.join " or " errors)
+import Novel exposing (Novel, InnerNovel(..))
+import Parser exposing (..)
+import Parser.LanguageKit as LK exposing (..)
+import Parser.LowLevel exposing (getCol)
+import Debug exposing (log)
 
 
 parse : String -> Result String (Novel ())
-parse =
-  parse_ novel
+parse input=
+  case run (novel []) input of
+    Err { problem } ->
+      Err <| toString problem
+
+    Ok res ->
+      Ok res
 
 
-andAppend : Parser () (Novel ()) -> Parser () (Novel ()) -> Parser () (Novel ())
-andAppend right left =
-  left
-    |> Combine.map Novel.append
-    |> Combine.andMap right
-
-
-andIgnore : Parser s x -> Parser s a -> Parser s a
-andIgnore right left =
-  left <* right
-
-
-novel : Parser () (Novel ())
-novel =
-  Combine.many factor
-    |> Combine.map Novel.concat
-
-
-factor : Parser () (Novel ())
-factor =
-  Combine.choice
-    [ endOrEol $> Novel.return
-    , at <* endOrEol
-    , line <* endOrEol
-    , text <* endOrEol
+novel : List (String, InnerNovel ()) -> Parser (Novel ())
+novel revNovels =
+  oneOf
+    [ succeed ((,) "main")
+      |= innerNovel
+      |> andThen (\nov -> novel <| (log "main" nov) :: revNovels)
+    , succeed identity
+      |= sectionNovel
+      |> andThen (\nov -> novel <| (log "section" nov) :: revNovels)
+    , succeed (List.reverse revNovels |> Novel.novelFromList)
+      |. end
     ]
 
 
-text : Parser () (Novel ())
+sectionNovel : Parser ((String, InnerNovel ()))
+sectionNovel =
+  succeed (,)
+    |. string (containsChar [ '{', '｛' ])
+    |. chompSeparators
+    |. at
+    |= string isLabel
+    |= innerNovel
+    |. string (containsChar [ '}', '｝' ])
+    |. chompSpaces
+
+
+innerNovel : Parser (InnerNovel ())
+innerNovel =
+  succeed identity
+    |. chompSpaces
+    |= innerNovelHelp []
+    |. chompSpaces
+
+
+innerNovelHelp : List (InnerNovel ()) -> Parser (InnerNovel ())
+innerNovelHelp revNovels =
+  let
+    tagger factor =
+      factor
+        |. chompSpaces
+        |> andThen (\nov -> innerNovelHelp <| nov :: revNovels)
+  in
+    oneOf
+      [ tagger line
+      , tagger text
+      , tagger at
+      , recursionHelp revNovels
+      ]
+
+
+text : Parser (InnerNovel ())
 text =
-  Combine.choice
-    [ text0
-    , text1
-    , text2
+  succeed Novel.text
+    |= string isText
+
+
+string : (Char -> Bool) -> Parser String
+string checker =
+  source <|
+    ignore oneOrMore checker
+
+
+textWithAt : List (InnerNovel ()) -> Parser (InnerNovel ())
+textWithAt revNovels =
+  oneOf
+    [ text
+      |. chompSeparators
+      |> andThen (\nov -> textWithAt <| nov :: revNovels)
+    , at
+      |. chompSeparators
+      |> andThen (\nov -> textWithAt <| nov :: revNovels)
+    , recursionHelp revNovels
     ]
 
 
-text0 : Parser () (Novel ())
-text0 =
-  string
-    |> Combine.map Novel.text
-    |> andIgnore (lookAhead endOrEol)
+recursionHelp : List (InnerNovel ()) -> Parser (InnerNovel ())
+recursionHelp revNovels =
+  case revNovels of
+    [] ->
+      fail "Novel is empty."
+
+    _ ->
+      case (List.reverse revNovels |> Novel.concat) of
+
+        Just novel ->
+          succeed novel
+
+        Nothing ->
+          Debug.crash "Fatal. recursionHelp could not crash."
 
 
-text1 : Parser () (Novel ())
-text1 =
-  string
-    |> Combine.map Novel.text
-    |> andAppend at
-    |> andIgnore (lookAhead endOrEol)
-
-
-text2 : Parser () (Novel ())
-text2 =
-  string
-    |> Combine.map Novel.text
-    |> andAppend at
-    |> andAppend (lazy (\_ -> text))
-
-
-line : Parser () (Novel ())
+line : Parser (InnerNovel ())
 line =
-  at *> label
-    |> Combine.map Novel.labeled
-    |> Combine.andMap text
+  getCol
+    |> andThen lineHelp
 
 
-label : Parser () String
-label =
-  let
-    until =
-      space $> Novel.return
+lineHelp : Int -> Parser (InnerNovel ())
+lineHelp col =
+  case col of
+    1 ->
+      delayedCommit at <|
+        succeed Novel.labeled
+          |= string isLabel
+          |. chompSeparators
+          |= textWithAt []
 
-    char =
-      noneOf [ '@', '＠', '\n', '\r' ]
-  in
-    char
-      |> Combine.map (::)
-      |> Combine.andMap (manyTill char until)
-      |> Combine.map String.fromList
-      |> Combine.mapError (\_ -> [ "expected label" ])
+    _ ->
+      fail "A line starts with @"
 
 
-string : Parser () String
-string =
-  let
-    until =
-      endOrEol $> Novel.return <|> at
-        |> lookAhead
-
-    char =
-      noneOf [ '@', '＠', '\n', '\r', '{', '}', '｛', '｝' ]
-  in
-    char
-      |> Combine.map (::)
-      |> Combine.andMap (manyTill char until)
-      |> Combine.map String.fromList
-      |> Combine.mapError (\_ -> [ "expected string" ])
-
-
-at : Parser () (Novel ())
+at : Parser (InnerNovel ())
 at =
-  oneOf [ '@', '＠' ]
-    $> Novel.at
-    |> Combine.mapError (\_ -> [ "expected @" ])
+  succeed Novel.at
+    |. ignore (Exactly 1) (containsChar [ '@', '＠' ])
 
 
-space : Parser () Char
-space =
-  oneOf [ ' ', '　' ]
-    |> Combine.mapError (\_ -> [ "expected space" ])
+isText : Char -> Bool
+isText char =
+  not <| containsChar [ '\r', '\n', '@', '＠', '{', '｛', '}', '｝' ] (log "isText" char)
 
 
-endOrEol : Parser () Char
-endOrEol =
-  Combine.Char.eol <|> Combine.end
-    $> '\n'
-    |> Combine.mapError (\_ -> [ "expected eol and input end" ])
+isLabel : Char -> Bool
+isLabel char =
+  not <| containsChar [ '\r', '\n', '@', '＠', ' ', '　', '\t' ] (log "isLabel" char)
 
+
+chompSeparators : Parser ()
+chompSeparators =
+  ignore zeroOrMore isSeparator
+
+
+chompSpaces : Parser ()
+chompSpaces =
+  ignore zeroOrMore isSpace
+
+
+isSpace : Char -> Bool
+isSpace char =
+  isSeparator char || containsChar [ '\r', '\n' ] char
+
+
+isSeparator : Char -> Bool
+isSeparator =
+  containsChar [ ' ', '　', '\t']
+
+
+containsChar : List Char -> Char -> Bool
+containsChar list key =
+  List.foldl (\elm bool -> bool || elm == key) False list

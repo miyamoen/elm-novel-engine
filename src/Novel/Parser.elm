@@ -99,13 +99,9 @@ recursionHelp revNovels =
       fail "Novel is empty."
 
     _ ->
-      case (List.reverse revNovels |> Novel.concat) of
-
-        Just novel ->
-          succeed novel
-
-        Nothing ->
-          Debug.crash "Fatal. recursionHelp could not crash."
+      List.reverse revNovels
+        |> Novel.concat
+        |> succeed
 
 
 line : Parser (InnerNovel ())

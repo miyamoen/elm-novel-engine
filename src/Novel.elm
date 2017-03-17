@@ -2,7 +2,6 @@ module Novel exposing (..)
 
 import Dict exposing (Dict)
 import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild)
-import View exposing (appendParent)
 
 type alias Label = String
 
@@ -12,7 +11,7 @@ type InnerNovel a
   | Line Label String (InnerNovel a)
   | At (InnerNovel a)
   | Choice (List String) (Char -> InnerNovel a)
-  | Return a
+  | Return (List a)
 
 
 type Msg
@@ -22,16 +21,16 @@ type Msg
 
 
 type alias Novel a =
-  { main : Maybe (InnerNovel a)
-  , rest : Maybe (InnerNovel a)
+  { main : InnerNovel a
+  , rest : InnerNovel a
   , sections : Dict String (InnerNovel a)
   }
 
 
 init : InnerNovel a -> Novel a
 init novel =
-  { main = Just novel
-  , rest = Just novel
+  { main = novel
+  , rest = novel
   , sections = Dict.empty
   }
 
@@ -40,13 +39,13 @@ update : Msg -> Novel a -> Novel a
 update msg model =
   case msg of
     Feed ->
-      { model | rest = model.rest |> Maybe.map feed }
+      { model | rest = feed model.rest }
 
     Restart ->
       { model | rest = model.main }
 
     Input char ->
-      { model | rest = model.rest |> Maybe.map (branch char) }
+      { model | rest = branch char model.rest }
 
 
 feed : InnerNovel a -> InnerNovel a
@@ -93,12 +92,12 @@ novelFromList novels =
     }
 
 
-text : String -> InnerNovel ()
+text : String -> InnerNovel a
 text str =
   Text str return
 
 
-line : Label -> String -> InnerNovel ()
+line : Label -> String -> InnerNovel a
 line label str =
   Line label str return
 
@@ -119,22 +118,22 @@ labeled label novel =
       novel
 
 
-at : InnerNovel ()
+at : InnerNovel a
 at =
   At return
 
 
-choice : List String -> InnerNovel ()
+choice : List String -> InnerNovel a
 choice choices =
   Choice choices <| always return
 
 
-return : InnerNovel ()
+return : InnerNovel a
 return =
-  Return ()
+  Return []
 
 
-andThen : (a -> InnerNovel b) -> InnerNovel a -> InnerNovel b
+andThen : (List a -> InnerNovel b) -> InnerNovel a -> InnerNovel b
 andThen func novel =
   case novel of
     Text text next ->
@@ -149,13 +148,20 @@ andThen func novel =
     Choice choices junction ->
       Choice choices <| (\char -> junction char |> andThen func)
 
-    Return a ->
-      func a
+    Return msgs ->
+      func msgs
+
 
 
 append : InnerNovel a -> InnerNovel a -> InnerNovel a
-append left right =
-  andThen (\_ -> right) left
+append for back =
+  for
+    |> andThen (\forMsgs ->
+      back
+        |> andThen (\backMsgs ->
+          Return <| forMsgs ++ backMsgs
+        )
+    )
 
 
 andAppend : InnerNovel a -> InnerNovel a -> InnerNovel a
@@ -163,15 +169,10 @@ andAppend =
   flip append
 
 
-concat : List (InnerNovel a) -> Maybe (InnerNovel a)
-concat novels =
-  case novels of
-    [] ->
-      Nothing
+concat : List (InnerNovel a) -> InnerNovel a
+concat =
+  List.foldl andAppend return
 
-    head :: rest ->
-      List.foldl (\right left -> andThen (\_ -> right) left) head rest
-        |> Just
 
 
 type View
@@ -200,8 +201,8 @@ view novel =
 
 
 
-htmlTree : Maybe (InnerNovel a) -> HtmlTree msg
-htmlTree maybeNovel =
+htmlTree : InnerNovel a -> HtmlTree msg
+htmlTree novel =
   let
     tagger v =
       case v of
@@ -214,15 +215,8 @@ htmlTree maybeNovel =
         VEnd ->
           textWrapper "p" "End"
   in
-    case maybeNovel of
-      Just novel ->
-        view novel
-          |> List.map tagger
-          |> container "div"
-          |> addClass "content"
-
-      Nothing ->
-        textWrapper "p" "Nothing"
-          |> appendParent (leaf "div")
-          |> addClass "content"
+    view novel
+      |> List.map tagger
+      |> container "div"
+      |> addClass "content"
 

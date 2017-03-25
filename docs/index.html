@@ -12619,57 +12619,36 @@ var _user$project$Novel$branch = F2(
 			return novel;
 		}
 	});
-var _user$project$Novel$feed = function (novel) {
-	feed:
+var _user$project$Novel$getMsg = function (model) {
+	var _p1 = model.rest;
+	if (_p1.ctor === 'Return') {
+		return _p1._0;
+	} else {
+		return {ctor: '[]'};
+	}
+};
+var _user$project$Novel$feed_ = function (novel) {
+	feed_:
 	while (true) {
-		var _p1 = novel;
-		switch (_p1.ctor) {
+		var _p2 = novel;
+		switch (_p2.ctor) {
 			case 'Text':
-				var _v2 = _p1._1;
-				novel = _v2;
-				continue feed;
-			case 'Line':
-				var _v3 = _p1._2;
+				var _v3 = _p2._1;
 				novel = _v3;
-				continue feed;
+				continue feed_;
+			case 'Line':
+				var _v4 = _p2._2;
+				novel = _v4;
+				continue feed_;
 			case 'At':
-				return _p1._0;
+				return _p2._0;
 			default:
 				return novel;
 		}
 	}
 };
-var _user$project$Novel$update = F2(
-	function (msg, model) {
-		var _p2 = msg;
-		switch (_p2.ctor) {
-			case 'Feed':
-				return _elm_lang$core$Native_Utils.update(
-					model,
-					{
-						rest: A2(_elm_lang$core$Maybe$map, _user$project$Novel$feed, model.rest)
-					});
-			case 'Restart':
-				return _elm_lang$core$Native_Utils.update(
-					model,
-					{rest: model.main});
-			default:
-				return _elm_lang$core$Native_Utils.update(
-					model,
-					{
-						rest: A2(
-							_elm_lang$core$Maybe$map,
-							_user$project$Novel$branch(_p2._0),
-							model.rest)
-					});
-		}
-	});
 var _user$project$Novel$init = function (novel) {
-	return {
-		main: _elm_lang$core$Maybe$Just(novel),
-		rest: _elm_lang$core$Maybe$Just(novel),
-		sections: _elm_lang$core$Dict$empty
-	};
+	return {main: novel, rest: novel, sections: _elm_lang$core$Dict$empty};
 };
 var _user$project$Novel$Novel = F3(
 	function (a, b, c) {
@@ -12679,7 +12658,56 @@ var _user$project$Novel$Return = function (a) {
 	return {ctor: 'Return', _0: a};
 };
 var _user$project$Novel$return = _user$project$Novel$Return(
-	{ctor: '_Tuple0'});
+	{ctor: '[]'});
+var _user$project$Novel$update = F2(
+	function (msg, model) {
+		var _p3 = msg;
+		switch (_p3.ctor) {
+			case 'Feed':
+				return _user$project$Novel$feed(model);
+			case 'Restart':
+				return _elm_lang$core$Native_Utils.update(
+					model,
+					{rest: model.main});
+			case 'Input':
+				return _elm_lang$core$Native_Utils.update(
+					model,
+					{
+						rest: A2(_user$project$Novel$branch, _p3._0, model.rest)
+					});
+			case 'Jump':
+				return _elm_lang$core$Native_Utils.update(
+					model,
+					{
+						rest: A2(
+							_elm_lang$core$Maybe$withDefault,
+							_user$project$Novel$return,
+							A2(_elm_lang$core$Dict$get, _p3._0, model.sections))
+					});
+			default:
+				return model;
+		}
+	});
+var _user$project$Novel$feed = function (model1) {
+	var model2 = _elm_lang$core$Native_Utils.update(
+		model1,
+		{
+			rest: _user$project$Novel$feed_(model1.rest)
+		});
+	var _p4 = _user$project$Novel$getMsg(model2);
+	if (_p4.ctor === '[]') {
+		return model2;
+	} else {
+		return A3(
+			_elm_lang$core$List$foldl,
+			F2(
+				function (msg, model_) {
+					return A2(_user$project$Novel$update, msg, model_);
+				}),
+			model2,
+			_p4);
+	}
+};
 var _user$project$Novel$Choice = F2(
 	function (a, b) {
 		return {ctor: 'Choice', _0: a, _1: b};
@@ -12704,19 +12732,19 @@ var _user$project$Novel$line = F2(
 	});
 var _user$project$Novel$labeled = F2(
 	function (label, novel) {
-		var _p3 = A2(_elm_lang$core$Debug$log, 'daypo', novel);
-		switch (_p3.ctor) {
+		var _p5 = A2(_elm_lang$core$Debug$log, 'daypo', novel);
+		switch (_p5.ctor) {
 			case 'Text':
 				return A3(
 					_user$project$Novel$Line,
 					label,
-					_p3._0,
-					A2(_user$project$Novel$labeled, label, _p3._1));
+					_p5._0,
+					A2(_user$project$Novel$labeled, label, _p5._1));
 			case 'At':
 				return _user$project$Novel$At(
-					A2(_user$project$Novel$labeled, label, _p3._0));
+					A2(_user$project$Novel$labeled, label, _p5._0));
 			case 'Return':
-				return _user$project$Novel$Return(_p3._0);
+				return _user$project$Novel$Return(_p5._0);
 			default:
 				return novel;
 		}
@@ -12730,79 +12758,65 @@ var _user$project$Novel$text = function (str) {
 };
 var _user$project$Novel$andThen = F2(
 	function (func, novel) {
-		var _p4 = novel;
-		switch (_p4.ctor) {
+		var _p6 = novel;
+		switch (_p6.ctor) {
 			case 'Text':
 				return A2(
 					_user$project$Novel$Text,
-					_p4._0,
-					A2(_user$project$Novel$andThen, func, _p4._1));
+					_p6._0,
+					A2(_user$project$Novel$andThen, func, _p6._1));
 			case 'Line':
 				return A3(
 					_user$project$Novel$Line,
-					_p4._0,
-					_p4._1,
-					A2(_user$project$Novel$andThen, func, _p4._2));
+					_p6._0,
+					_p6._1,
+					A2(_user$project$Novel$andThen, func, _p6._2));
 			case 'At':
 				return _user$project$Novel$At(
-					A2(_user$project$Novel$andThen, func, _p4._0));
+					A2(_user$project$Novel$andThen, func, _p6._0));
 			case 'Choice':
 				return A2(
 					_user$project$Novel$Choice,
-					_p4._0,
+					_p6._0,
 					function ($char) {
 						return A2(
 							_user$project$Novel$andThen,
 							func,
-							_p4._1($char));
+							_p6._1($char));
 					});
 			default:
-				return func(_p4._0);
+				return func(_p6._0);
 		}
 	});
 var _user$project$Novel$append = F2(
-	function (left, right) {
+	function ($for, back) {
 		return A2(
 			_user$project$Novel$andThen,
-			function (_p5) {
-				return right;
+			function (forMsgs) {
+				return A2(
+					_user$project$Novel$andThen,
+					function (backMsgs) {
+						return _user$project$Novel$Return(
+							A2(_elm_lang$core$Basics_ops['++'], forMsgs, backMsgs));
+					},
+					back);
 			},
-			left);
+			$for);
 	});
 var _user$project$Novel$andAppend = _elm_lang$core$Basics$flip(_user$project$Novel$append);
-var _user$project$Novel$concat = function (novels) {
-	var _p6 = novels;
-	if (_p6.ctor === '[]') {
-		return _elm_lang$core$Maybe$Nothing;
-	} else {
-		return _elm_lang$core$Maybe$Just(
-			A3(
-				_elm_lang$core$List$foldl,
-				F2(
-					function (right, left) {
-						return A2(
-							_user$project$Novel$andThen,
-							function (_p7) {
-								return right;
-							},
-							left);
-					}),
-				_p6._0,
-				_p6._1));
-	}
-};
+var _user$project$Novel$concat = A2(_elm_lang$core$List$foldl, _user$project$Novel$andAppend, _user$project$Novel$return);
 var _user$project$Novel$novelFromList = function (novels) {
 	var sections = _elm_lang$core$Dict$fromList(
 		A2(
 			_elm_lang$core$List$filter,
-			function (_p8) {
+			function (_p7) {
 				return A2(
 					F2(
 						function (x, y) {
 							return !_elm_lang$core$Native_Utils.eq(x, y);
 						}),
 					'main',
-					_elm_lang$core$Tuple$first(_p8));
+					_elm_lang$core$Tuple$first(_p7));
 			},
 			novels));
 	var main = _user$project$Novel$concat(
@@ -12811,17 +12825,21 @@ var _user$project$Novel$novelFromList = function (novels) {
 			_elm_lang$core$Tuple$second,
 			A2(
 				_elm_lang$core$List$filter,
-				function (_p9) {
+				function (_p8) {
 					return A2(
 						F2(
 							function (x, y) {
 								return _elm_lang$core$Native_Utils.eq(x, y);
 							}),
 						'main',
-						_elm_lang$core$Tuple$first(_p9));
+						_elm_lang$core$Tuple$first(_p8));
 				},
 				novels)));
 	return {main: main, rest: main, sections: sections};
+};
+var _user$project$Novel$NoOp = {ctor: 'NoOp'};
+var _user$project$Novel$Jump = function (a) {
+	return {ctor: 'Jump', _0: a};
 };
 var _user$project$Novel$Restart = {ctor: 'Restart'};
 var _user$project$Novel$Input = function (a) {
@@ -12837,38 +12855,42 @@ var _user$project$Novel$VText = function (a) {
 	return {ctor: 'VText', _0: a};
 };
 var _user$project$Novel$view = function (novel) {
-	var _p10 = novel;
-	switch (_p10.ctor) {
+	var _p9 = novel;
+	switch (_p9.ctor) {
 		case 'Return':
-			return {
-				ctor: '::',
-				_0: _user$project$Novel$VEnd,
-				_1: {ctor: '[]'}
-			};
+			if (_p9._0.ctor === '[]') {
+				return {
+					ctor: '::',
+					_0: _user$project$Novel$VEnd,
+					_1: {ctor: '[]'}
+				};
+			} else {
+				return {ctor: '[]'};
+			}
 		case 'Text':
 			return {
 				ctor: '::',
-				_0: _user$project$Novel$VText(_p10._0),
-				_1: _user$project$Novel$view(_p10._1)
+				_0: _user$project$Novel$VText(_p9._0),
+				_1: _user$project$Novel$view(_p9._1)
 			};
 		case 'Line':
 			return {
 				ctor: '::',
-				_0: A2(_user$project$Novel$VLine, _p10._0, _p10._1),
-				_1: _user$project$Novel$view(_p10._2)
+				_0: A2(_user$project$Novel$VLine, _p9._0, _p9._1),
+				_1: _user$project$Novel$view(_p9._2)
 			};
 		case 'At':
 			return {ctor: '[]'};
 		default:
-			return A2(_elm_lang$core$List$map, _user$project$Novel$VText, _p10._0);
+			return A2(_elm_lang$core$List$map, _user$project$Novel$VText, _p9._0);
 	}
 };
-var _user$project$Novel$htmlTree = function (maybeNovel) {
+var _user$project$Novel$htmlTree = function (novel) {
 	var tagger = function (v) {
-		var _p11 = v;
-		switch (_p11.ctor) {
+		var _p10 = v;
+		switch (_p10.ctor) {
 			case 'VText':
-				return A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', _p11._0);
+				return A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', _p10._0);
 			case 'VLine':
 				return A2(
 					_danielnarey$elm_html_tree$HtmlTree$textWrapper,
@@ -12878,33 +12900,22 @@ var _user$project$Novel$htmlTree = function (maybeNovel) {
 						'[',
 						A2(
 							_elm_lang$core$Basics_ops['++'],
-							_p11._0,
-							A2(_elm_lang$core$Basics_ops['++'], ']', _p11._1))));
+							_p10._0,
+							A2(_elm_lang$core$Basics_ops['++'], ']', _p10._1))));
 			default:
 				return A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', 'End');
 		}
 	};
-	var _p12 = maybeNovel;
-	if (_p12.ctor === 'Just') {
-		return A2(
-			_danielnarey$elm_html_tree$HtmlTree$addClass,
-			'content',
+	return A2(
+		_danielnarey$elm_html_tree$HtmlTree$addClass,
+		'content',
+		A2(
+			_danielnarey$elm_html_tree$HtmlTree$container,
+			'div',
 			A2(
-				_danielnarey$elm_html_tree$HtmlTree$container,
-				'div',
-				A2(
-					_elm_lang$core$List$map,
-					tagger,
-					_user$project$Novel$view(_p12._0))));
-	} else {
-		return A2(
-			_danielnarey$elm_html_tree$HtmlTree$addClass,
-			'content',
-			A2(
-				_user$project$View$appendParent,
-				_danielnarey$elm_html_tree$HtmlTree$leaf('div'),
-				A2(_danielnarey$elm_html_tree$HtmlTree$textWrapper, 'p', 'Nothing')));
-	}
+				_elm_lang$core$List$map,
+				tagger,
+				_user$project$Novel$view(novel))));
 };
 var _user$project$Novel_Parser$containsChar = F2(
 	function (list, key) {
@@ -12971,7 +12982,15 @@ var _user$project$Novel_Parser$isLabel = function ($char) {
 								_1: {
 									ctor: '::',
 									_0: _elm_lang$core$Native_Utils.chr('\t'),
-									_1: {ctor: '[]'}
+									_1: {
+										ctor: '::',
+										_0: _elm_lang$core$Native_Utils.chr('!'),
+										_1: {
+											ctor: '::',
+											_0: _elm_lang$core$Native_Utils.chr('！'),
+											_1: {ctor: '[]'}
+										}
+									}
 								}
 							}
 						}
@@ -13040,25 +13059,64 @@ var _user$project$Novel_Parser$recursionHelp = function (revNovels) {
 	if (_p0.ctor === '[]') {
 		return _elm_tools$parser$Parser$fail('Novel is empty.');
 	} else {
-		var _p1 = _user$project$Novel$concat(
-			_elm_lang$core$List$reverse(revNovels));
-		if (_p1.ctor === 'Just') {
-			return _elm_tools$parser$Parser$succeed(_p1._0);
-		} else {
-			return _elm_lang$core$Native_Utils.crashCase(
-				'Novel.Parser',
-				{
-					start: {line: 102, column: 7},
-					end: {line: 108, column: 62}
-				},
-				_p1)('Fatal. recursionHelp could not crash.');
-		}
+		return _elm_tools$parser$Parser$succeed(
+			_user$project$Novel$concat(
+				_elm_lang$core$List$reverse(revNovels)));
 	}
 };
 var _user$project$Novel_Parser$string = function (checker) {
 	return _elm_tools$parser$Parser$source(
 		A2(_elm_tools$parser$Parser$ignore, _elm_tools$parser$Parser$oneOrMore, checker));
 };
+var _user$project$Novel_Parser$jumpMessage = A2(
+	_elm_tools$parser$Parser$delayedCommit,
+	A2(
+		_elm_tools$parser$Parser$ignore,
+		_elm_tools$parser$Parser$Exactly(1),
+		_user$project$Novel_Parser$containsChar(
+			{
+				ctor: '::',
+				_0: _elm_lang$core$Native_Utils.chr('@'),
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$core$Native_Utils.chr('＠'),
+					_1: {ctor: '[]'}
+				}
+			})),
+	A2(
+		_elm_tools$parser$Parser$map,
+		function (_p1) {
+			return _user$project$Novel$Return(
+				_elm_lang$core$List$singleton(_p1));
+		},
+		A2(
+			_elm_tools$parser$Parser_ops['|='],
+			A2(
+				_elm_tools$parser$Parser_ops['|.'],
+				A2(
+					_elm_tools$parser$Parser_ops['|.'],
+					A2(
+						_elm_tools$parser$Parser_ops['|.'],
+						A2(
+							_elm_tools$parser$Parser_ops['|.'],
+							_elm_tools$parser$Parser$succeed(_user$project$Novel$Jump),
+							A2(
+								_elm_tools$parser$Parser$ignore,
+								_elm_tools$parser$Parser$Exactly(1),
+								_user$project$Novel_Parser$containsChar(
+									{
+										ctor: '::',
+										_0: _elm_lang$core$Native_Utils.chr('!'),
+										_1: {
+											ctor: '::',
+											_0: _elm_lang$core$Native_Utils.chr('！'),
+											_1: {ctor: '[]'}
+										}
+									}))),
+						_user$project$Novel_Parser$chompSeparators),
+					_elm_tools$parser$Parser$keyword('jump')),
+				_user$project$Novel_Parser$chompSeparators),
+			_user$project$Novel_Parser$string(_user$project$Novel_Parser$isLabel))));
 var _user$project$Novel_Parser$text = A2(
 	_elm_tools$parser$Parser_ops['|='],
 	_elm_tools$parser$Parser$succeed(_user$project$Novel$text),
@@ -13092,8 +13150,8 @@ var _user$project$Novel_Parser$textWithAt = function (revNovels) {
 		});
 };
 var _user$project$Novel_Parser$lineHelp = function (col) {
-	var _p3 = col;
-	if (_p3 === 1) {
+	var _p2 = col;
+	if (_p2 === 1) {
 		return A2(
 			_elm_tools$parser$Parser$delayedCommit,
 			_user$project$Novel_Parser$at,
@@ -13132,11 +13190,15 @@ var _user$project$Novel_Parser$innerNovelHelp = function (revNovels) {
 				_0: tagger(_user$project$Novel_Parser$text),
 				_1: {
 					ctor: '::',
-					_0: tagger(_user$project$Novel_Parser$at),
+					_0: tagger(_user$project$Novel_Parser$jumpMessage),
 					_1: {
 						ctor: '::',
-						_0: _user$project$Novel_Parser$recursionHelp(revNovels),
-						_1: {ctor: '[]'}
+						_0: tagger(_user$project$Novel_Parser$at),
+						_1: {
+							ctor: '::',
+							_0: _user$project$Novel_Parser$recursionHelp(revNovels),
+							_1: {ctor: '[]'}
+						}
 					}
 				}
 			}
@@ -13251,19 +13313,19 @@ var _user$project$Novel_Parser$novel = function (revNovels) {
 		});
 };
 var _user$project$Novel_Parser$parse = function (input) {
-	var _p4 = A2(
+	var _p3 = A2(
 		_elm_tools$parser$Parser$run,
 		_user$project$Novel_Parser$novel(
 			{ctor: '[]'}),
 		input);
-	if (_p4.ctor === 'Err') {
+	if (_p3.ctor === 'Err') {
 		return _elm_lang$core$Result$Err(
-			_elm_lang$core$Basics$toString(_p4._0.problem));
+			_elm_lang$core$Basics$toString(_p3._0));
 	} else {
-		return _elm_lang$core$Result$Ok(_p4._0);
+		return _elm_lang$core$Result$Ok(_p3._0);
 	}
 };
-var _user$project$Form$sample = '文章が表示されます\n続けて表示されます\n\n空白行は無視されます\n\nあっとまーくでクリック待ちします＠\n\nあっと＠まーくで＠クリック待ち＠\n\n＠キャラ1　セリフです＠\n＠キャラ２　キャラ名の表示も雑です＠これもキャラセリフ＠\n\n現在実装されているのはこれくらいです\n＠\n\nおわり\n下のボタンを押してください\n\n\n｛＠1章\n\nスクリプトをまとめて名前付けすることもできます\n\n＠いけぼ　おれの嫁になってくれ＠\n＠ひろいん　ええええ＠\n\n｝\n\n｛＠2章\n\n＠いけぼ　く、右ひざの古傷がうずく！＠\n＠ひろいん　低気圧だものね\n\n｝\n';
+var _user$project$Form$sample = '文章が表示されます\n続けて表示されます\n\n空白行は無視されます\n\nあっとまーくでクリック待ちします＠\n\nあっと＠まーくで＠クリック待ち＠\n\n＠キャラ1　セリフです＠\n＠キャラ２　キャラ名の表示も雑です＠これもキャラセリフ＠\n\n現在実装されているのはこれくらいです\n＠\n\nおわり\n下のボタンを押してください\n\n\n｛＠1章\n\nスクリプトをまとめて名前付けすることもできます\n\n＠いけぼ　おれの嫁になってくれ＠\n＠ひろいん　ええええ＠\n\n@! jump 2章\n｝\n\n｛＠2章\n\n＠いけぼ　く、右ひざの古傷がうずく！＠\n＠ひろいん　低気圧だものね\n\n｝\n\n@! jump 1章\n';
 var _user$project$Form$subscriptions = function (model) {
 	return _elm_lang$core$Platform_Sub$none;
 };
@@ -13297,7 +13359,7 @@ var _user$project$Form$update = F2(
 						_elm_lang$core$Native_Utils.update(
 							model,
 							{
-								error: A2(_elm_lang$core$Debug$log, 'error : ', _p1._0)
+								error: A2(_elm_lang$core$Debug$log, 'Parse error', _p1._0)
 							}));
 				}
 		}

@@ -18,16 +18,18 @@ type Msg
   = Feed
   | Input Char
   | Restart
+  | Jump String
+  | NoOp
 
 
-type alias Novel a =
-  { main : InnerNovel a
-  , rest : InnerNovel a
-  , sections : Dict String (InnerNovel a)
+type alias Novel =
+  { main : InnerNovel Msg
+  , rest : InnerNovel Msg
+  , sections : Dict String (InnerNovel Msg)
   }
 
 
-init : InnerNovel a -> Novel a
+init : InnerNovel Msg -> Novel
 init novel =
   { main = novel
   , rest = novel
@@ -35,11 +37,11 @@ init novel =
   }
 
 
-update : Msg -> Novel a -> Novel a
+update : Msg -> Novel -> Novel
 update msg model =
   case msg of
     Feed ->
-      { model | rest = feed model.rest }
+      feed model
 
     Restart ->
       { model | rest = model.main }
@@ -47,21 +49,55 @@ update msg model =
     Input char ->
       { model | rest = branch char model.rest }
 
+    Jump section ->
+      { model | rest =
+        Dict.get section model.sections
+          |> Maybe.withDefault return
+          -- |> andAppend model.rest
+      }
 
-feed : InnerNovel a -> InnerNovel a
-feed novel =
+    NoOp ->
+      model
+
+
+feed : Novel -> Novel
+feed model1 =
+  let
+    model2 =
+      { model1 | rest = feed_ model1.rest }
+  in
+    case getMsg model2 of
+      [] ->
+        model2
+
+      msgs ->
+        List.foldl (\msg model_ -> update msg model_) model2 msgs
+
+
+feed_ : InnerNovel a -> InnerNovel a
+feed_ novel =
   case novel of
     Text _ rest ->
-      feed rest
+      feed_ rest
 
     Line _ _ rest ->
-      feed rest
+      feed_ rest
 
     At rest ->
       rest
 
     _ ->
       novel
+
+
+getMsg : Novel -> List Msg
+getMsg model =
+  case model.rest of
+    Return msgs ->
+      msgs
+
+    _ ->
+      []
 
 
 branch : Char -> InnerNovel a -> InnerNovel a
@@ -74,7 +110,7 @@ branch input novel =
       novel
 
 
-novelFromList : List (String, InnerNovel a) -> Novel a
+novelFromList : List (String, InnerNovel Msg) -> Novel
 novelFromList novels =
   let
     main =
@@ -184,8 +220,11 @@ type View
 view : InnerNovel a -> List View
 view novel =
   case novel of
-    Return a ->
+    Return [] ->
       [ VEnd ]
+
+    Return _ ->
+      []
 
     Text str rest ->
       VText str :: view rest

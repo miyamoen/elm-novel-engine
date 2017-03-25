@@ -7,17 +7,17 @@ import Parser.LowLevel exposing (getCol)
 import Debug exposing (log)
 
 
-parse : String -> Result String (Novel ())
+parse : String -> Result String Novel
 parse input=
   case run (novel []) input of
-    Err { problem } ->
+    Err problem ->
       Err <| toString problem
 
     Ok res ->
       Ok res
 
 
-novel : List (String, InnerNovel ()) -> Parser (Novel ())
+novel : List (String, InnerNovel Novel.Msg) -> Parser Novel
 novel revNovels =
   oneOf
     [ succeed ((,) "main")
@@ -31,7 +31,7 @@ novel revNovels =
     ]
 
 
-sectionNovel : Parser ((String, InnerNovel ()))
+sectionNovel : Parser ((String, InnerNovel Novel.Msg))
 sectionNovel =
   succeed (,)
     |. string (containsChar [ '{', '｛' ])
@@ -43,7 +43,7 @@ sectionNovel =
     |. chompSpaces
 
 
-innerNovel : Parser (InnerNovel ())
+innerNovel : Parser (InnerNovel Novel.Msg)
 innerNovel =
   succeed identity
     |. chompSpaces
@@ -51,7 +51,7 @@ innerNovel =
     |. chompSpaces
 
 
-innerNovelHelp : List (InnerNovel ()) -> Parser (InnerNovel ())
+innerNovelHelp : List (InnerNovel Novel.Msg) -> Parser (InnerNovel Novel.Msg)
 innerNovelHelp revNovels =
   let
     tagger factor =
@@ -62,12 +62,13 @@ innerNovelHelp revNovels =
     oneOf
       [ tagger line
       , tagger text
+      , tagger jumpMessage
       , tagger at
       , recursionHelp revNovels
       ]
 
 
-text : Parser (InnerNovel ())
+text : Parser (InnerNovel a)
 text =
   succeed Novel.text
     |= string isText
@@ -79,7 +80,7 @@ string checker =
     ignore oneOrMore checker
 
 
-textWithAt : List (InnerNovel ()) -> Parser (InnerNovel ())
+textWithAt : List (InnerNovel a) -> Parser (InnerNovel a)
 textWithAt revNovels =
   oneOf
     [ text
@@ -92,7 +93,7 @@ textWithAt revNovels =
     ]
 
 
-recursionHelp : List (InnerNovel ()) -> Parser (InnerNovel ())
+recursionHelp : List (InnerNovel a) -> Parser (InnerNovel a)
 recursionHelp revNovels =
   case revNovels of
     [] ->
@@ -104,13 +105,13 @@ recursionHelp revNovels =
         |> succeed
 
 
-line : Parser (InnerNovel ())
+line : Parser (InnerNovel a)
 line =
   getCol
     |> andThen lineHelp
 
 
-lineHelp : Int -> Parser (InnerNovel ())
+lineHelp : Int -> Parser (InnerNovel a)
 lineHelp col =
   case col of
     1 ->
@@ -124,10 +125,23 @@ lineHelp col =
       fail "A line starts with @"
 
 
-at : Parser (InnerNovel ())
+at : Parser (InnerNovel a)
 at =
   succeed Novel.at
     |. ignore (Exactly 1) (containsChar [ '@', '＠' ])
+
+
+jumpMessage : Parser (InnerNovel Novel.Msg)
+jumpMessage =
+  delayedCommit (ignore (Exactly 1) (containsChar [ '@', '＠' ])) <|
+    (succeed Novel.Jump
+      |. ignore (Exactly 1) (containsChar [ '!', '！' ])
+      |. chompSeparators
+      |. keyword "jump"
+      |. chompSeparators
+      |= string isLabel
+      |> map (List.singleton >> Novel.Return)
+    )
 
 
 isText : Char -> Bool
@@ -137,7 +151,7 @@ isText char =
 
 isLabel : Char -> Bool
 isLabel char =
-  not <| containsChar [ '\r', '\n', '@', '＠', ' ', '　', '\t' ] (log "isLabel" char)
+  not <| containsChar [ '\r', '\n', '@', '＠', ' ', '　', '\t', '!', '！' ] (log "isLabel" char)
 
 
 chompSeparators : Parser ()

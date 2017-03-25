@@ -25,7 +25,7 @@ main =
 
 
 type alias Model =
-  { novel : Novel.Novel ()
+  { novel : Novel.Novel
   , script : String
   , error : String
   }
@@ -68,7 +68,7 @@ update msg model =
             |> withNone
 
         Err error ->
-          { model | error = Debug.log "error : " error }
+          { model | error = Debug.log "Parse error" error }
             |> withNone
 
 
@@ -86,7 +86,7 @@ novelInputCard text =
     |> matchingTag "a" (addAction ("click", Parse))
 
 
-novelCard : String -> Novel a -> HtmlTree Msg
+novelCard : String -> Novel -> HtmlTree Msg
 novelCard label novel =
   View.novelCard "Novel" (novel.rest |> Novel.htmlTree)
     |> addAction ("click", NovelMsg Novel.Feed)
@@ -149,6 +149,7 @@ sample =
 ＠いけぼ　おれの嫁になってくれ＠
 ＠ひろいん　ええええ＠
 
+@! jump 2章
 ｝
 
 ｛＠2章
@@ -157,4 +158,6 @@ sample =
 ＠ひろいん　低気圧だものね
 
 ｝
+
+@! jump 1章
 """

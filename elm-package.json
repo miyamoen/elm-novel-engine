@@ -9,6 +9,7 @@
     "exposed-modules": [],
     "dependencies": {
         "Fresheyeball/elm-return": "6.0.3 <= v < 7.0.0",
+        "arturopala/elm-monocle": "1.4.0 <= v < 2.0.0",
         "danielnarey/elm-bulma-classes": "1.0.6 <= v < 2.0.0",
         "danielnarey/elm-html-tree": "3.0.1 <= v < 4.0.0",
         "elm-community/basics-extra": "2.0.0 <= v < 3.0.0",

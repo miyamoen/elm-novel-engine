@@ -1,24 +1,29 @@
 module Novel exposing (..)
 
 import Dict exposing (Dict)
-import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild)
-
+import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild, addAction)
+import Tuple
+import List.Extra exposing (getAt)
 type alias Label = String
 
 
-type InnerNovel a
-  = Text String (InnerNovel a)
-  | Line Label String (InnerNovel a)
-  | At (InnerNovel a)
-  | Choice (List String) (Char -> InnerNovel a)
-  | Return (List a)
+type InnerNovel msg
+  = Text String (InnerNovel msg)
+  | Line Label String (InnerNovel msg)
+  | At (InnerNovel msg)
+  | Choice (Choices msg) (InnerNovel msg)
+  | Return (List msg)
+
+
+type Choices msg =
+  Choices (List (String, List msg))
 
 
 type Msg
   = Feed
-  | Input Char
   | Restart
   | Jump String
+  | Select Int
   | NoOp
 
 
@@ -46,8 +51,8 @@ update msg model =
     Restart ->
       { model | rest = model.main }
 
-    Input char ->
-      { model | rest = branch char model.rest }
+    Select num ->
+      select num model
 
     Jump section ->
       { model | rest =
@@ -100,14 +105,23 @@ getMsg model =
       []
 
 
-branch : Char -> InnerNovel a -> InnerNovel a
-branch input novel =
-  case novel of
-    Choice _ restF ->
-      restF input
+select : Int -> Novel -> Novel
+select num model =
+  let
+    getMsg choices =
+      getAt num choices
+        |> Maybe.map Tuple.second
+        |> Maybe.withDefault []
+  in
+    case model.rest of
+      Choice (Choices choices) rest ->
+        List.foldl
+          (\msg model_ -> update msg model_)
+          { model | rest = rest }
+          (getMsg choices)
 
-    _ ->
-      novel
+      _ ->
+        model
 
 
 novelFromList : List (String, InnerNovel Msg) -> Novel
@@ -159,9 +173,9 @@ at =
   At return
 
 
-choice : List String -> InnerNovel a
+choice : List (String, List a) -> InnerNovel a
 choice choices =
-  Choice choices <| always return
+  Choice (Choices choices) return
 
 
 return : InnerNovel a
@@ -169,32 +183,40 @@ return =
   Return []
 
 
-andThen : (List a -> InnerNovel b) -> InnerNovel a -> InnerNovel b
-andThen func novel =
+andThen : (a -> b) -> (List a -> InnerNovel b) -> InnerNovel a -> InnerNovel b
+andThen tagger func novel =
   case novel of
     Text text next ->
-      Text text <| andThen func next
+      Text text <| andThen tagger func next
 
     Line label str next ->
-      Line label str <| andThen func next
+      Line label str <| andThen tagger func next
 
     At next ->
-      At <| andThen func next
+      At <| andThen tagger func next
 
-    Choice choices junction ->
-      Choice choices <| (\char -> junction char |> andThen func)
+    Choice choices next ->
+      Choice (mapChoices tagger choices) <| andThen tagger func next
 
     Return msgs ->
       func msgs
+
+
+mapChoices : (a -> b) -> Choices a -> Choices b
+mapChoices tagger (Choices choices) =
+  choices
+    |> List.map (Tuple.mapSecond (List.map tagger))
+    |> Choices
+
 
 
 
 append : InnerNovel a -> InnerNovel a -> InnerNovel a
 append for back =
   for
-    |> andThen (\forMsgs ->
+    |> andThen identity (\forMsgs ->
       back
-        |> andThen (\backMsgs ->
+        |> andThen identity (\backMsgs ->
           Return <| forMsgs ++ backMsgs
         )
     )
@@ -214,6 +236,7 @@ concat =
 type View
   = VText String
   | VLine Label String
+  | VSelect (List String)
   | VEnd
 
 
@@ -235,12 +258,13 @@ view novel =
     At rest ->
       []
 
-    Choice choices junction ->
-      List.map VText choices
+    Choice (Choices choices) rest ->
+      VSelect (List.map (Tuple.first) choices)
+        |> List.singleton
 
 
 
-htmlTree : InnerNovel a -> HtmlTree msg
+htmlTree : InnerNovel Msg -> HtmlTree Msg
 htmlTree novel =
   let
     tagger v =
@@ -250,6 +274,12 @@ htmlTree novel =
 
         VLine label str ->
           textWrapper "p" ("[" ++ label ++ "]" ++ str)
+
+        VSelect choices ->
+          choices
+            |> List.map (VText >> tagger)
+            |> List.indexedMap (\num p -> addAction ("click", Select num) p)
+            |> container "div"
 
         VEnd ->
           textWrapper "p" "End"

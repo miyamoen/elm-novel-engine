@@ -62,7 +62,7 @@ innerNovelHelp revNovels =
     oneOf
       [ tagger line
       , tagger text
-      , tagger jumpMessage
+      , tagger msg
       , tagger at
       , recursionHelp revNovels
       ]
@@ -131,17 +131,32 @@ at =
     |. ignore (Exactly 1) (containsChar [ '@', '＠' ])
 
 
-jumpMessage : Parser (InnerNovel Novel.Msg)
-jumpMessage =
-  delayedCommit (ignore (Exactly 1) (containsChar [ '@', '＠' ])) <|
-    (succeed Novel.Jump
-      |. ignore (Exactly 1) (containsChar [ '!', '！' ])
-      |. chompSeparators
-      |. keyword "jump"
-      |. chompSeparators
-      |= string isLabel
-      |> map (List.singleton >> Novel.Return)
+msg : Parser (InnerNovel Novel.Msg)
+msg =
+  oneOf
+    [ jumpMsg ]
+
+
+jumpMsg : Parser (InnerNovel Novel.Msg)
+jumpMsg =
+  delayedCommit at <|
+    ( succeed Novel.Jump
+    |. ignore (Exactly 1) (containsChar [ '!', '！' ])
+    |. chompSeparators
+    |. keyword "jump"
+    |. chompSeparators
+    |= string isLabel
+    |> map (List.singleton >> Novel.Return)
     )
+
+
+select : Parser (InnerNovel Novel.Msg)
+select =
+  delayedCommit at <|
+    succeed Novel.choice
+      |. ignore (Exactly 1) (containsChar [ '?', '？' ])
+      | chompSpaces
+
 
 
 isText : Char -> Bool
@@ -151,7 +166,7 @@ isText char =
 
 isLabel : Char -> Bool
 isLabel char =
-  not <| containsChar [ '\r', '\n', '@', '＠', ' ', '　', '\t', '!', '！' ] (log "isLabel" char)
+  not <| containsChar [ '\r', '\n', '@', '＠', ' ', '　', '\t', '!', '！', '?', '？' ] (log "isLabel" char)
 
 
 chompSeparators : Parser ()

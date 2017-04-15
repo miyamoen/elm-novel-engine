@@ -1,113 +1,118 @@
 module Novel.Script exposing (..)
 
+import Html exposing (Html)
+
+main : Html msg
+main = Html.text "すっごーい　君は型合わせが得意なフレンズなんだね！"
+
 
 type alias Label = String
 
 
-type Script msg action
-  = Text String (Script msg action)
-  | Labeled Label String (Script msg action)
-  | Wait (Script msg action)
-  | Call action (Script msg action)
-  | ChoiceCall (List (String, action)) (Script msg action)
-  | Return (List msg)
+type Script flg act
+  = Text String (Script flg act)
+  | Labeled Label String (Script flg act)
+  | Wait (Script flg act)
+  | Call act (Script flg act)
+  | ChoiceCall (List (String, act)) (Script flg act)
+  | Return (List flg)
 
 
 -- Constructor
 
-return : List msg -> Script msg act
-return msgs =
-  Return msgs
+return : List flg -> Script flg act
+return flgs =
+  Return flgs
 
 
-return_ : Script msg act
+return_ : Script flg act
 return_ =
   return []
 
 
-text : String -> Script msg act
+text : String -> Script flg act
 text str =
   Text str return_
 
 
-labeled : Label -> String -> Script msg act
+labeled : Label -> String -> Script flg act
 labeled label str =
   Labeled label str return_
 
 
-wait : Script msg act
+wait : Script flg act
 wait =
   Wait return_
 
 
-call : act -> Script msg act
+call : act -> Script flg act
 call act =
   Call act return_
 
 
-choiceCall : List (String, act) -> Script msg act
+choiceCall : List (String, act) -> Script flg act
 choiceCall choices =
   ChoiceCall choices return_
 
 
---
+-- monad?
 
-andThen : (act -> act_) -> (List msg -> Script msg_ act_) -> Script msg act -> Script msg_ act_
-andThen actF msgF script =
+andThen : (act -> act_) -> (List flg -> Script flg_ act_) -> Script flg act -> Script flg_ act_
+andThen actF flgF script =
   case script of
     Text str next ->
-      Text str <| andThen actF msgF next
+      Text str <| andThen actF flgF next
 
     Labeled label str next ->
-      Labeled label str <| andThen actF msgF next
+      Labeled label str <| andThen actF flgF next
 
     Wait next ->
-      Wait <| andThen actF msgF next
+      Wait <| andThen actF flgF next
 
     Call act next ->
-      Call (actF act) <| andThen actF msgF next
+      Call (actF act) <| andThen actF flgF next
 
     ChoiceCall choices next ->
-      ChoiceCall (List.map (Tuple.mapSecond actF) choices) <| andThen actF msgF next
+      ChoiceCall (List.map (Tuple.mapSecond actF) choices) <| andThen actF flgF next
 
-    Return msgs ->
-      msgF msgs
+    Return flgs ->
+      flgF flgs
 
 
-andThen_ : (List msg -> Script msg_ act) -> Script msg act -> Script msg_ act
+andThen_ : (List flg -> Script flg_ act) -> Script flg act -> Script flg_ act
 andThen_ =
   andThen identity
 
 
-append : Script msg act -> Script msg act -> Script msg act
+append : Script flg act -> Script flg act -> Script flg act
 append a b =
-  a |> andThen_ (\msgs -> b |> andThen_ (\msgs_ -> Return <| msgs ++ msgs_))
+  a |> andThen_ (\flgs -> b |> andThen_ (\flgs_ -> Return <| flgs ++ flgs_))
 
 
-andAppend : Script msg act -> Script msg act -> Script msg act
+andAppend : Script flg act -> Script flg act -> Script flg act
 andAppend =
   flip append
 
 
-concat : List (Script msg act) -> Script msg act
+concat : List (Script flg act) -> Script flg act
 concat =
   List.foldl andAppend return_
 
 
 -- Out
 
-type Out msg act
+type Out flg act
   = OutText (List (Label, String))
   | OutActs (List act)
   | OutChoice (List (String, act))
-  | OutMsgs (List msg)
+  | OutFlgs (List flg)
 
 
-out : Script msg act -> Out msg act
+out : Script flg act -> Out flg act
 out script =
   case script of
-    Return msgs ->
-      OutMsgs msgs
+    Return flgs ->
+      OutFlgs flgs
 
     Call act next ->
       outActs [ act ] next
@@ -125,7 +130,7 @@ out script =
       OutText []
 
 
-outText : List (Label, String) -> Script msg act -> Out msg act
+outText : List (Label, String) -> Script flg act -> Out flg act
 outText acc script =
   case script of
     Text str next ->
@@ -138,7 +143,7 @@ outText acc script =
       OutText <| List.reverse acc
 
 
-outActs : List act -> Script msg act -> Out msg act
+outActs : List act -> Script flg act -> Out flg act
 outActs acc script =
   case script of
     Call act next ->
@@ -150,7 +155,7 @@ outActs acc script =
 
 -- operation
 
-feed : Script msg act -> Script msg act
+feed : Script flg act -> Script flg act
 feed script =
   case script of
     Text _ next ->
@@ -172,7 +177,7 @@ feed script =
       script
 
 
-feedText : Script msg act -> Script msg act
+feedText : Script flg act -> Script flg act
 feedText script =
   case script of
     Text _ next ->
@@ -188,7 +193,7 @@ feedText script =
       script
 
 
-feedCall : Script msg act -> Script msg act
+feedCall : Script flg act -> Script flg act
 feedCall script =
   case script of
     Call _ next ->

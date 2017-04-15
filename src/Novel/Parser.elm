@@ -155,7 +155,7 @@ select =
   delayedCommit at <|
     succeed Novel.choice
       |. ignore (Exactly 1) (containsChar [ '?', '？' ])
-      | chompSpaces
+      |. chompSpaces
 
 
 

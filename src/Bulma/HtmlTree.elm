@@ -1,4 +1,4 @@
-module ViewTree exposing (..)
+module Bulma.HtmlTree exposing (..)
 
 
 import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass)

@@ -1,33 +1,15 @@
 module Novel.View exposing (..)
 
-
+import Html exposing (Html)
 import HtmlTree exposing (..)
 import BulmaClasses exposing (..)
 import Bulma.HtmlTree exposing (..)
 
+import Novel exposing (..)
 
-view : InnerNovel a -> List View
-view novel =
-  case novel of
-    Return [] ->
-      [ VEnd ]
 
-    Return _ ->
-      []
-
-    Text str rest ->
-      VText str :: view rest
-
-    Line label str rest ->
-      VLine label str :: view rest
-
-    At rest ->
-      []
-
-    Choice (Choices choices) rest ->
-      VSelect (List.map (Tuple.first) choices)
-        |> List.singleton
-
+main : Html msg
+main = Html.text "すっごーい　君は型合わせが得意なフレンズなんだね！"
 
 
 htmlTree : InnerNovel Msg -> HtmlTree Msg

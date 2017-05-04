@@ -1,96 +1,107 @@
 module Novel exposing (..)
 
 import Dict exposing (Dict)
-import HtmlTree exposing (HtmlTree, leaf, withClasses, container, textWrapper, addClass, prependChild, addAction)
-import Tuple
-import List.Extra exposing (getAt)
 import Html exposing (Html)
 import Return exposing (singleton)
 
 import Novel.Script as Script exposing (Script, Out(..), Label)
 
 
+type alias Scene = String
+
+
 main : Html msg
 main = Html.text "すっごーい　君は型合わせが得意なフレンズなんだね！"
 
 
-type Msg
+type Action
   = Feed
-  | GetScriptOut
-  | Restart
+  | Choice Int
+  -- Game画面的なactionの処理を入れるつもり
   | NoOp
 
 
-type ScriptAction
-  = NoAct
+type alias Novel state msg =
+  { scripts : Dict Scene (Script msg Action)
+  , label : Scene
+  , cursor : Script msg Action
 
+  , state : state
+  , nextScene : state -> Scene -> Scene
+  , update : msg -> state -> state
 
-type alias Novel flg =
-  { revHistory : List (Script flg Msg)
-  , cursor : Script flg Msg
-  , sections : Dict String (Script flg Msg)
-  , view : NovelView
-  , flags : List flg
+  , lines : List (Label, String)
+  -- Game画面的な設定
   }
 
 
 type NovelView
   = TextList (List (Label, String))
-  | ChoiceList (List (String, Msg))
+  | ChoiceList (List (String, Action))
 
 
-update : Msg -> Novel flg -> (Novel flg, Cmd Msg)
+update : Action -> Novel state msg -> (Novel state msg, Cmd Action)
 update msg novel =
   case msg of
     Feed ->
-      { novel | cursor = Script.feed novel.cursor }
-        |> singleton
+      let
+        (next, out) = Script.feed novel.cursor
+      in
+        { novel | cursor = next }
+          |> updateWithScriptOut out
 
-    GetScriptOut ->
-      execScriptOut novel
-
-    Restart ->
-      { novel
-        | cursor = List.head novel.revHistory
-          |> Maybe.withDefault Script.return_
-      } |> singleton
-
-    -- Jump section ->
-    --   { novel | rest =
-    --     Dict.get section novel.sections
-    --       |> Maybe.withDefault return
-    --       -- |> andAppend novel.rest
-    --   }
+    Choice num ->
+      let
+        (next, out) = Script.choice num novel.cursor
+      in
+        { novel | cursor = next }
+          |> updateWithScriptOut out
 
     NoOp ->
       novel
         |> singleton
 
 
-execScriptOut : Novel flg -> (Novel flg, Cmd Msg)
-execScriptOut novel =
-  case Script.out novel.cursor of
-    OutText texts ->
-      novel
-        |> setView (TextList texts)
+updateWithScriptOut : Script.Out msg Action -> Novel state msg -> (Novel state msg, Cmd Action)
+updateWithScriptOut out novel =
+  case out of
+    OutText lines ->
+      { novel | lines = lines }
         |> singleton
 
-    OutActs msgs ->
+    OutChoices lines ->
+      { novel | lines = lines }
+        |> singleton
+
+    OutActs acts ->
       singleton novel |>
-        (msgs
-        |> List.map (\msg -> Return.andThen (update msg))
+        (acts
+        |> List.map (\act -> Return.andThen (update act))
         |> Return.pipel)
 
-    OutChoice choices ->
-      novel
-        |> setView (ChoiceList choices)
-        |> singleton
+    OutMsg maybeMsg ->
+      let
+        newState =
+          maybeMsg
+            |> Maybe.map (flip novel.update novel.state)
+            |> Maybe.withDefault novel.state
 
-    OutFlgs flgs ->
-      { novel | flags = List.append novel.flags flgs }
-        |> singleton
+        label =
+          novel.nextScene newState novel.label
 
+        next =
+          case Dict.get label novel.scripts of
+            Just script ->
+              script
 
-setView : NovelView -> Novel flg -> Novel flg
-setView view novel =
-  { novel | view = view }
+            Nothing ->
+              Debug.crash "次の話が見つからないんですけどー"
+
+        out =
+          Script.out next
+      in
+        { novel
+        | cursor = next
+        , label = label
+        , state = newState
+        } |> updateWithScriptOut out

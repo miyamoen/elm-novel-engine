@@ -23,10 +23,10 @@ cdnTree : HtmlTree msg
 cdnTree =
   let
     bulma =
-      styleLeaf "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.3.0/css/bulma.min.css"
+      styleLeaf "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.4.1/css/bulma.min.css"
 
     fontAwesome =
-      styleLeaf "https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"
+      styleLeaf "https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"
   in
     container "div" [ bulma, fontAwesome ]
 

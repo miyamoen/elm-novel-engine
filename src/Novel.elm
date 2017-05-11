@@ -4,7 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Return exposing (singleton)
 
-import Novel.Script as Script exposing (Script, Out(..), Label)
+import Novel.Script as Script exposing (Script, Out(..), Label, Line)
 
 
 type alias Scene = String
@@ -30,14 +30,9 @@ type alias Novel state msg =
   , nextScene : state -> Scene -> Scene
   , update : msg -> state -> state
 
-  , lines : List (Label, String)
+  , lines : List Line
   -- Game画面的な設定
   }
-
-
-type NovelView
-  = TextList (List (Label, String))
-  | ChoiceList (List (String, Action))
 
 
 update : Action -> Novel state msg -> (Novel state msg, Cmd Action)
@@ -65,11 +60,7 @@ update msg novel =
 updateWithScriptOut : Script.Out msg Action -> Novel state msg -> (Novel state msg, Cmd Action)
 updateWithScriptOut out novel =
   case out of
-    OutText lines ->
-      { novel | lines = lines }
-        |> singleton
-
-    OutChoices lines ->
+    OutLines lines ->
       { novel | lines = lines }
         |> singleton
 

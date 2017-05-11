@@ -7,6 +7,7 @@ main : Html msg
 main = Html.text "すっごーい　君は型合わせが得意なフレンズなんだね！"
 
 
+(=>) : a -> b -> (a, b)
 (=>) = (,)
 
 
@@ -101,10 +102,15 @@ concat =
 -- Out
 
 type Out msg act
-  = OutText (List (Label, String))
-  | OutChoices (List (Label, String))
+  = OutLines (List Line)
   | OutActs (List act)
   | OutMsg (Maybe msg)
+
+
+type Line
+  = TextList (List String)
+  | LabeledList Label (List String)
+  | ChoiceList (List String)
 
 
 out : Script msg act -> Out msg act
@@ -114,42 +120,54 @@ out script =
       OutMsg msg
 
     Call act next ->
-      outActs [ act ] next
+      outWithActs [ act ] next
 
     Choices choices ->
       choices
         |> List.map Tuple.first
-        |> List.map ((,) "")
-        |> OutChoices
+        |> ChoiceList
+        |> List.singleton
+        |> OutLines
 
     Text str next ->
-      outText [ ("", str) ] next
+      outWithText [] (TextList [ str ]) next
 
     Labeled label str next ->
-      outText [ (label, str) ] next
+      outWithText [] (LabeledList label [ str ]) next
 
     Wait _ ->
-      OutText []
+      OutLines []
 
 
-outText : List (Label, String) -> Script msg act -> Out msg act
-outText acc script =
-  case script of
-    Text str next ->
-      outText (("", str) :: acc) next
+outWithText : List Line -> Line -> Script msg act -> Out msg act
+outWithText acc line script =
+  case (script, line) of
+    (Text str next, TextList texts) ->
+      outWithText acc (TextList (str :: texts)) next
 
-    Labeled label str next ->
-      outText ((label, str) :: acc) next
+    (Text str next, _) ->
+      outWithText (line :: acc) (TextList [ str ]) next
+
+    (Labeled label str next, LabeledList label_ texts) ->
+      if label == label_ then
+        outWithText acc (LabeledList label (str :: texts)) next
+      else
+        outWithText (line :: acc) (LabeledList label [ str ]) next
+
+    (Labeled label str next, _) ->
+      outWithText (line :: acc) (LabeledList label [ str ]) next
 
     _ ->
-      OutText <| List.reverse acc
+      line :: acc
+        |> List.reverse
+        |> OutLines
 
 
-outActs : List act -> Script msg act -> Out msg act
-outActs acc script =
+outWithActs : List act -> Script msg act -> Out msg act
+outWithActs acc script =
   case script of
     Call act next ->
-      outActs (act :: acc) next
+      outWithActs (act :: acc) next
 
     _ ->
       OutActs <| List.reverse acc
